@@ -8,6 +8,29 @@
 
 #define port_ 1313
 const unsigned int reuseable = 1;
+const char help_[] = {"help"};
+const char save_[] = {"save"};
+const char find_[] = {"find"};
+const char savefile_[] = {"savefile"};
+const char load_[] = {"load"};
+
+bool check(const char *a, const char *b){
+    int len_a = strlen(a);
+    int len_b = strlen(b);
+    printf("checking %s %s\n", a, b);
+    if(len_a != len_b) return false;
+    int i;
+    for(i = 0; i < len_a; i ++){
+        if(a[i] != b[i]) return false;
+    }
+    return true;
+}
+
+int get_type(char *s){
+    printf("get type of %s\n", s);
+    if(check(help_, s)) return 0;
+    return -1;
+}
 
 void server_init(struct sockaddr_in *p)
 {
@@ -75,7 +98,26 @@ int tcp_(){
             printf("receive data from client %d: %s\n", fd_client, buf);
 
             save_value(buf);
+            char opt[100];
+            int i, tot = 0; int len = strlen(buf);
+            for(i = 0; i < len; i ++){
+                if((buf[i] >= 'a' && buf[i] <= 'z') || (buf[i] >= 'A' && buf[i] <= 'Z') || (buf[i] >= '0' && buf[i] <= '9')){
+                    opt[tot ++] = buf[i];
+                } else break; 
+            }
 
+            switch (get_type(opt))
+            {
+                case 0:
+                    printf("------------------------------------------------------\n");
+                    printf("help\n");
+                    printf("------------------------------------------------------\n");
+                    break;
+         
+                default:
+                    printf(">unknow operation\n");
+                    break;
+            }                 
             write(fd_client, buf, read_l);
             printf("send data to client %d: %s\n", fd_client, buf);
         }
