@@ -41,14 +41,31 @@ struct msg{
 struct Tree{
     int s[100000][16];//4bit  0 ~ 2^4 - 1
     ULL value[100000]; bool flag[100000];
+    ULL kv[100000];
+    int s_size[100000];
+    int num[100000];
+    int recycle[100000], top;
     int tot;
 }T;
 
+void node_init(int x){
+    int i;
+    for(i = 0; i < 16; i ++) T.s[x][i] = 0;
+    T.value[x] = 0;
+    T.flag[x] = false;
+    T.kv[x] = 0;
+    T.s_size[x] = 0;
+    T.num[x] = 0;
+}
+
 void tree_init(){
         T.tot = 0;
+        T.top = 0;
         int i;
         for(i = 0; i < 16; i ++) T.s[0][i] = 0;
         memset(T.value, 0, sizeof(T.value));
+        memset(T.s_size, 0, sizeof(T.s_size));
+        memset(T.num, 0, sizeof(T.num));
     }
 
 
@@ -100,35 +117,151 @@ void Tload(char *name){
     fclose(f);
 }
 
+
+
+void merge(int now){
+    if(T.flag[now]){
+        printf("???\n");
+        return ;
+    }
+    if(T.s_size[now] != 1){
+        printf("???\n");
+        return ;
+    }
+    int i, go = 0;
+    for(i = 0; i <= 15; i ++){
+        if(T.s[now][i]){
+            go = T.s[now][i];
+            T.s[now][i] = 0;//!
+            T.s_size[now] = 0;//!
+            break;
+        }
+    }
+    T.kv[now] = (T.kv[now] << (4 * T.num[go])) + T.kv[go];
+    // printf("now %d kv after %llu go = %d\n", now, T.kv[now], go);
+    if(T.s_size[go]){
+        for(i = 0; i <= 15; i ++){
+            T.s[now][i] = T.s[go][i];
+        }
+        T.s_size[now] = T.s_size[go];
+    }
+    if(T.flag[go]){
+        
+        T.flag[go] = false;
+
+    }
+    T.num[now] += T.num[go];
+    T.recycle[++ T.top] = go;
+}
+
+void split(int now, int pos){
+
+    int go = T.top >= 1 ? T.recycle[T.top --] : ++ T.tot;
+    // printf("-------------------split now %d pos %d go %d\n", now, pos, go);
+    ULL all = T.kv[now], allnum = T.num[now];
+    T.kv[now] = all / (1 << ((allnum - pos) * 4)), T.num[now] = pos;
+    T.kv[go] = all % (1 << ((allnum - pos) * 4)), T.num[go] = allnum - pos;
+
+    T.s_size[go] = T.s_size[now];
+    int i;
+    for(i = 0; i < 16; i ++) T.s[go][i] = T.s[now][i];
+    T.s_size[now] = 1;
+    for(i = 0; i < 16; i ++) T.s[now][i] = 0;
+    // printf("!!!!!!!!!!! goto %d\n", T.kv[go] / (1 << ((T.num[go] - 1) * 4)));
+    T.s[now][T.kv[go] / (1 << ((T.num[go] - 1) * 4))] = go;
+
+    if(T.flag[now]) {
+        T.flag[go] = true;
+        T.value[go] = T.value[now];
+
+        T.flag[now] = false;
+        T.value[now] = 0;
+    }
+    
+}
+
+int match(ULL a, int lena, ULL b, int lenb){//匹配2个01串，以4为单位，看能匹配到第几个块， len为块数
+    int i = (lena - 1) * 4, j = (lenb - 1) * 4;
+    int ans = 0;
+    for(; i >= 0 && j >= 0; i -= 4, j -= 4){
+        int x = a / (1ll << i);
+        int y = b / (1ll << j);
+        if(x != y) break;
+        ans ++;
+        
+    }
+    return ans;
+}
+
 void Tinsert(ULL k, ULL v){
+    // printf("--------------------insert\n");
     int now = 0; ULL rest = k;
     int i;
     for(i = 60; i >= 0; i -= 4){
         int x = rest / (1ll << i);
-        rest %= (1ll << i);
-        // printf("----> i %lld x %d rest %llu\n", (1ll << i), x, rest);
-        if(T.s[now][x]) now = T.s[now][x];
-        else {
-            T.s[now][x] = ++ T.tot;
-            now = T.tot;
-            int j = 0;
-            for(j = 0; j < 16; j ++) T.s[now][j] = 0;
+        // printf("----> i %lld x %d rest %llu\n", (1ll << i), x, rest % (1ll << i));
+        // printf("???now %d go %d num[go] %d\n", now, T.s[now][x], T.num[T.s[now][x]]);
+        if(T.num[T.s[now][x]] > 1){
+            
+            int num = match(rest, (i / 4) + 1, T.kv[T.s[now][x]], T.num[T.s[now][x]]);
+            i -= 4 * (num - 1);
+            if(num == T.num[T.s[now][x]]){
+                now = T.s[now][x];
+            } else {
+                split(T.s[now][x], num);
+                now = T.s[now][x];
+            }
+        } else {
+            if(T.s[now][x]) now = T.s[now][x];
+            else {
+                if(T.top) {
+                    T.s[now][x] = T.recycle[T.top --];
+                    node_init(T.s[now][x]);
+                } else T.s[now][x] = ++ T.tot;
+                // printf("create new node %d\n", T.tot);
+                T.s_size[now] ++;
+                // int j = 0;
+                // for(j = 0; j < 16; j ++) T.s[T.s[now][x]][j] = 0;
+                T.kv[T.s[now][x]] = x;
+                T.num[T.s[now][x]] = 1;
+                // printf("----> s_size[now] %d\n", T.s_size[now]);
+                if(T.s_size[now] == 1 && !T.value[now] && now != 0){
+                    merge(now);
+                } else now = T.s[now][x];
+            }
+            
         }
+        rest %= (1ll << i);
     }
     if(T.flag[now]) {
         printf(">k = %llu is exist, the value has been overwritten! %d\n", k, now);
     }
+    // printf("!!!%llu\n", T.kv[now]);
     T.value[now] = v, T.flag[now] = true;
 }
 
 struct msg Tfind(ULL k){
     int now = 0; ULL rest = k;
     int i;
+    // printf("-----------------find\n");//
     for(i = 60; i >= 0; i -= 4){
         int x = rest / (1ll << i);
-        rest %= (1ll << i);
-        if(T.s[now][x]) now = T.s[now][x];
+        // printf("----> i %lld x %d rest %llu\n", (1ll << i), x, rest % (1ll << i));
+        // printf("???now %d go %d num[go] %d\n", now, T.s[now][x], T.num[T.s[now][x]]);
+        if(T.num[T.s[now][x]] > 1){
+            int num = match(rest, (i / 4) + 1, T.kv[T.s[now][x]], T.num[T.s[now][x]]);
+            i -= 4 * (num - 1);
+            // printf("match %d\n", num);
+            if(num == T.num[T.s[now][x]]){
+                now = T.s[now][x];
+            } else {
+                printf(">k = %llu is absent !!!\n", k);
+                return (struct msg){0, false};
+            }
+        }
+        else if(T.s[now][x]) now = T.s[now][x];
         // printf("-----> %d\n", now);
+        rest %= (1ll << i);
     }
     if(!T.flag[now]) {
         printf(">k = %llu is absent\n", k);
@@ -136,15 +269,6 @@ struct msg Tfind(ULL k){
     }
     return (struct msg){T.value[now], true};       
 }
-
-void split(){//radix tree
-
-}
-
-void compress(){
-
-}
-
 
 int main(){
     while(1){
@@ -159,9 +283,9 @@ int main(){
                 printf("------------------------------------------------------\n");
                 printf("input 'save k v' to save\n");
                 printf("input 'find k' to find v by k\n");
-                printf("input 'savefile filename' to save data into file\n");
-                printf("input 'load filename' to load data from file\n");
-                printf("length of 'filename' must < 100\n");
+                //printf("input 'savefile filename' to save data into file\n");
+                //printf("input 'load filename' to load data from file\n");
+                //printf("length of 'filename' must < 100\n");
                 printf("------------------------------------------------------\n");
                 break;
 
@@ -178,14 +302,14 @@ int main(){
                     printf(">the value is %llu\n", res.v);
                 }
                 break;
-            case 3:
-                scanf("%s", name);
-                Tsave(name);
-                break;
-            case 4:
-                scanf("%s", name);
-                Tload(name);
-                break;            
+           // case 3:
+           //     scanf("%s", name);
+           //     Tsave(name);
+           //     break;
+           // case 4:
+           //     scanf("%s", name);
+           //     Tload(name);
+           //    break;            
             default:
                 printf(">unknow operation\n");
                 break;
