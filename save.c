@@ -3,13 +3,16 @@
 #include <string.h>
 #include <stdbool.h>
 
-const char help_[] = {"help"};
-const char save_[] = {"save"};
-const char find_[] = {"find"};
-const char savefile_[] = {"savefile"};
-const char load_[] = {"load"};
+//const char help_[] = {"help"};//Сохранить тип команды
+//const char save_[] = {"save"};
+//const char find_[] = {"find"};
+//const char savefile_[] = {"savefile"};
+//const char load_[] = {"load"};
+// const char find_less_[] = {"find_less"};
+// const char find_more_[] = {"find_more"};
+const char op_[][10] = {{"help"}, {"save"}, {"find"}, {"savefile"}, {"load"}, {"find_less"}, {"find_more"}};
 
-
+//Сравните две строки на равенство
 bool check(const char *a, const char *b){
     int len_a = strlen(a);
     int len_b = strlen(b);
@@ -30,7 +33,6 @@ int get_type(char *s){
     return -1;
 }
 
-
 #define ULL unsigned long long 
 
 struct msg{
@@ -38,13 +40,14 @@ struct msg{
     bool flag;
 };
 
-struct Tree{
-    int s[100000][16];//4bit  0 ~ 2^4 - 1
-    ULL value[100000]; bool flag[100000];
-    ULL kv[100000];
-    int s_size[100000];
-    int num[100000];
-    int recycle[100000], top;
+#define maxn 100000
+struct Tree{//trie ---> radix tree ---> Adaptive
+    int s[maxn][16];//4bit  0 ~ 2^4 - 1
+    ULL value[maxn]; bool flag[maxn];
+    ULL kv[maxn];//Сохраняем значение текущего узла (без предков)
+    int s_size[maxn];//Количество детей узла
+    int num[maxn];//Количество реальных узлов, содержащихся в текущем узле
+    int recycle[maxn], top;//Пул для восстановления, используемый для сжатия и разделения узлов
     int tot;
 }T;
 
@@ -69,8 +72,8 @@ void tree_init(){
     }
 
 
-void Tsave(char *name){
-    FILE* f = fopen(name, "w");
+void Tsave(char *name){//Проблемы с хранением файлов рассматриваются здесь Структура хранения файлов нуждается в перепроектировании и в данный момент недоступна.
+    FILE* f = fopen(name, "w");//перезаписать
     fprintf(f, "%d\n", T.tot);
     int i, j;
     for(i = 0 ; i <= T.tot; i ++){
@@ -89,7 +92,7 @@ void Tsave(char *name){
     fclose(f);
 }
 
-void Tload(char *name){
+void Tload(char *name){//Загрузка сохраненных данных
     FILE* f = fopen(name, "r");
     fscanf(f, "%d", &(T.tot));
     printf("load... %d\n", T.tot);
@@ -120,7 +123,7 @@ void Tload(char *name){
 
 
 void merge(int now){
-    if(T.flag[now]){
+    if(T.flag[now]){// Текущий узел не может быть завершающим узлом
         printf("???\n");
         return ;
     }
@@ -129,7 +132,7 @@ void merge(int now){
         return ;
     }
     int i, go = 0;
-    for(i = 0; i <= 15; i ++){
+    for(i = 0; i <= 15; i ++){// найдите дочерние узлы для сжатия
         if(T.s[now][i]){
             go = T.s[now][i];
             T.s[now][i] = 0;//!
@@ -137,38 +140,38 @@ void merge(int now){
             break;
         }
     }
-    T.kv[now] = (T.kv[now] << (4 * T.num[go])) + T.kv[go];
+    T.kv[now] = (T.kv[now] << (4 * T.num[go])) + T.kv[go];// Префиксная консолидация
     // printf("now %d kv after %llu go = %d\n", now, T.kv[now], go);
-    if(T.s_size[go]){
-        for(i = 0; i <= 15; i ++){
+    if(T.s_size[go]){// Если у дочернего узла еще есть дети
+        for(i = 0; i <= 15; i ++){// напрямую перезаписываем дочерние узлы в текущий узел
             T.s[now][i] = T.s[go][i];
         }
         T.s_size[now] = T.s_size[go];
     }
-    if(T.flag[go]){
+    if(T.flag[go]){// Если объединенный узел является терминирующим узлом
         
         T.flag[go] = false;
 
     }
     T.num[now] += T.num[go];
-    T.recycle[++ T.top] = go;
+    T.recycle[++ T.top] = go;//Поместить в пул переработки
 }
-
 void split(int now, int pos){
-
-    int go = T.top >= 1 ? T.recycle[T.top --] : ++ T.tot;
+    //radix tree требует разделения и сжатия узлов, 
+    //now — точка, которую нужно разделить, pos — это позиция, которую нужно разделить.
+    int go = T.top >= 1 ? T.recycle[T.top --] : ++ T.tot;//Сначала используйте переработанные узлы, если они есть.
     // printf("-------------------split now %d pos %d go %d\n", now, pos, go);
     ULL all = T.kv[now], allnum = T.num[now];
     T.kv[now] = all / (1 << ((allnum - pos) * 4)), T.num[now] = pos;
     T.kv[go] = all % (1 << ((allnum - pos) * 4)), T.num[go] = allnum - pos;
 
-    T.s_size[go] = T.s_size[now];
+    T.s_size[go] = T.s_size[now];// Сначала передайте новому узлу исходное количество детей
     int i;
     for(i = 0; i < 16; i ++) T.s[go][i] = T.s[now][i];
-    T.s_size[now] = 1;
+    T.s_size[now] = 1;//измените количество дочерних узлов исходного узла еще раз
     for(i = 0; i < 16; i ++) T.s[now][i] = 0;
     // printf("!!!!!!!!!!! goto %d\n", T.kv[go] / (1 << ((T.num[go] - 1) * 4)));
-    T.s[now][T.kv[go] / (1 << ((T.num[go] - 1) * 4))] = go;
+    T.s[now][T.kv[go] / (1 << ((T.num[go] - 1) * 4))] = go;// Возьмите только первый блок
 
     if(T.flag[now]) {
         T.flag[go] = true;
@@ -180,7 +183,7 @@ void split(int now, int pos){
     
 }
 
-int match(ULL a, int lena, ULL b, int lenb){//匹配2个01串，以4为单位，看能匹配到第几个块， len为块数
+int match(ULL a, int lena, ULL b, int lenb){//Сопоставьте 2 строки 01 в количестве 4 штук, чтобы узнать, сколько блоков может совпасть, len - количество блоков.
     int i = (lena - 1) * 4, j = (lenb - 1) * 4;
     int ans = 0;
     for(; i >= 0 && j >= 0; i -= 4, j -= 4){
@@ -190,7 +193,7 @@ int match(ULL a, int lena, ULL b, int lenb){//匹配2个01串，以4为单位，
         ans ++;
         
     }
-    return ans;
+    return ans;//Количество совпавших блоков
 }
 
 void Tinsert(ULL k, ULL v){
@@ -270,6 +273,78 @@ struct msg Tfind(ULL k){
     return (struct msg){T.value[now], true};       
 }
 
+//Структуры данных, отвечающие за поиск
+int Sroot, Sn, Stot;
+int Ssize[maxn], Sf[maxn], Scnt[maxn], Sson[maxn][2];
+ULL Sdate[maxn];
+//size - это сумма cnt поддеревьев, в которых находится узел
+void Supdate(int x)
+{
+    Ssize[x]=Ssize[Sson[x][0]]+Ssize[Sson[x][1]]+Scnt[x];
+}
+void Srotate(int x)//вращать
+{
+    int y = Sf[x], z = Sf[y], k = Sson[y][1]==x;
+    Sson[z][Sson[z][1] == y] = x, Sf[x] = z;
+    Sson[y][k] = Sson[x][k^1];
+    Sf[Sson[x][k^1]] = y;
+    Sson[x][k^1] = y;
+    Sf[y] = x;
+    Supdate(y), Supdate(x);
+}
+void Ssplay(int x, int goal)//splay
+{
+    while(Sf[x] != goal)
+    {
+        int y = Sf[x], z = Sf[y];
+        if(z != goal)
+            (Sson[y][0] == x) ^ (Sson[z][0] == y) ? Srotate(x): Srotate(y);
+        Srotate(x);
+    }
+    if(!goal) Sroot = x;
+}
+void SInsert(ULL x)//Вставить узел
+{
+    int now = Sroot,fa=0;
+    while(now && Sdate[now] != x)
+    {
+        fa = now;
+        now = Sson[now][x > Sdate[now]];
+    }
+    if(now)Scnt[now]++;
+    else 
+    {
+        now = ++Stot;
+        if(fa) Sson[fa][x > Sdate[fa]] = now;
+        Sson[Stot][0] = Sson[Stot][1] = 0;
+        Sf[Stot] = fa, Sdate[Stot] = x;
+        Scnt[Stot] = Ssize[Stot] = 1;
+    }
+    Ssplay(now,0);
+}
+
+void Sfind(ULL x)
+{
+    int now = Sroot;
+    if(!now)return ;
+    while(Sson[now][x > Sdate[now]] && x != Sdate[now]){
+        now = Sson[now][x > Sdate[now]];
+    }
+    Ssplay(now,0);
+}
+
+int SNext(ULL x,int f)//Операция поиска
+{
+    Sfind(x);
+    int now = Sroot;
+    if((Sdate[now]>x && f) || (Sdate[now]<x && !f))return now;
+    now = Sson[now][f];
+    while(Sson[now][f^1]) {
+        now = Sson[now][f^1];
+    }
+    return now;
+}
+
 int main(){
     while(1){
         printf("input help to get info ...\n");
@@ -285,6 +360,8 @@ int main(){
                 printf("input 'find k' to find v by k\n");
                 //printf("input 'savefile filename' to save data into file\n");
                 //printf("input 'load filename' to load data from file\n");
+                printf("input 'find_less k' to find the closest smaller value by v\n");
+                printf("input 'find_more k' to find the closest bigger value by v\n");
                 //printf("length of 'filename' must < 100\n");
                 printf("------------------------------------------------------\n");
                 break;
@@ -293,6 +370,7 @@ int main(){
 
                 scanf("%llu%llu", &k, &v);
                 Tinsert(k, v);
+                SInsert(k);
                 break;
             
             case 2:
@@ -301,7 +379,7 @@ int main(){
                 if(res.flag) {
                     printf(">the value is %llu\n", res.v);
                 }
-                break;
+                break;            
            // case 3:
            //     scanf("%s", name);
            //     Tsave(name);
@@ -309,7 +387,28 @@ int main(){
            // case 4:
            //     scanf("%s", name);
            //     Tload(name);
-           //    break;            
+           //    break;  
+            case 5:
+                scanf("%llu", &v);
+                if(Ssize[Sroot] <= 0){
+                    printf("data empty\n");
+                } else {
+                    int ans = SNext(v, 0);
+                    // printf("---> ans %d\n", ans);
+                    if(ans == 0) printf("no one is smaller than %llu\n", v);
+                    else printf(">the value is %llu\n", Sdate[ans]);
+                }
+                break;
+            case 6:
+                scanf("%llu", &v);
+                if(Ssize[Sroot] <= 0){
+                    printf("data empty\n");
+                } else {
+                    int ans = SNext(v, 1);
+                    if(ans == 0) printf("no one is smaller than %llu\n", v);
+                    else printf(">the value is %llu\n", Sdate[ans]);
+                }
+                break;
             default:
                 printf(">unknow operation\n");
                 break;
