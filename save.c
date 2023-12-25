@@ -24,20 +24,23 @@ bool check(const char *a, const char *b){
     return true;
 }
 
+//оптимизация
 int get_type(char *s){
-    if(check(help_, s)) return 0;
-    else if(check(save_, s)) return 1;
-    else if(check(find_, s)) return 2;
-    else if(check(savefile_, s)) return 3;
-    else if(check(load_, s)) return 4;
+    // printf("!!!%s\n", s);
+    int len = 9, i;
+    for(i = 0; i < len; i ++){
+        if(check(op_[i], s)) return i;
+    }
+    // printf("???");
     return -1;
 }
 
 #define ULL unsigned long long 
-
+void SDelete(ULL x);
 struct msg{
     ULL v;
     bool flag;
+    int father;
 };
 
 #define maxn 100000
@@ -262,15 +265,66 @@ struct msg Tfind(ULL k){
                 return (struct msg){0, false};
             }
         }
-        else if(T.s[now][x]) now = T.s[now][x];
+        else if(T.s[now][x]) {
+            last = now;
+            now = T.s[now][x];
+        } else {
+            if(!T.flag[now]) {
+                printf(">k = %llu is absent\n", k);
+                return (struct msg){0, false, 0};
+            }
+        }
         // printf("-----> %d\n", now);
         rest %= (1ll << i);
     }
     if(!T.flag[now]) {
-        printf(">k = %llu is absent\n", k);
-        return (struct msg){0, false};
+      printf(">k = %llu is absent\n", k);
+      if(T.s_size[now] == 0){
+         if(last != 0){
+            T.s_size[last] --;
+            for(i = 0; i < 16; i ++){
+                if(T.s[last][i] == now) {
+                    T.s[last][i] = 0;
+                }
+            }
+        } 
+        T.recycle[++ T.top] = now;
     }
-    return (struct msg){T.value[now], true};       
+    return (struct msg){0, false, 0};
+}
+ return (struct msg){now, true, last};       
+}
+
+bool Tupdate(ULL k, ULL v){//Измените значение v
+    struct msg res = Tfind(k);
+    if(res.flag == false){//k не существует
+
+        return false;
+    }
+    T.value[res.v] = v;
+    return true;
+}
+
+bool Tdelete(ULL k){
+    struct msg res = Tfind(k);
+    if(res.flag == false){//k не существует
+        printf(">k = %llu is absent\n", k);
+        return false;
+    } 
+    T.recycle[++ T.top] = res.v;
+    SDelete(T.value[res.v]);
+   
+    int now = res.father;
+    if(T.s_size[res.father] > 0) T.s_size[res.father] --;
+    int i;
+    for(i = 0; i < 16; i ++) {
+        if(T.s[res.father][i] == res.v) {
+            T.s[res.father][i] = 0;
+            break;
+        }
+    }
+   
+    
 }
 
 //Структуры данных, отвечающие за поиск
@@ -345,6 +399,44 @@ int SNext(ULL x,int f)//Операция поиска
     return now;
 }
 
+void SDelete(ULL x)//Удаление по значению
+{
+    int last=SNext(x, 0);
+    int next=SNext(x, 1);
+//    printf("------%llu %llu\n", Sdate[last], Sdate[next]);
+    if(last == 0){
+        Ssplay(next, 0);
+      
+    } else if(next == 0){
+        Ssplay(last, 0);
+      
+        int del = Sson[next][1];
+        if(Scnt[del] > 1)
+            Scnt[del] --, Ssplay(del, 0);
+        else Sson[next][1] = 0;
+        return ;
+    } else Ssplay(last, 0); Ssplay(next, last);
+    // printf("------%llu %llu\n", Sdate[last], Sdate[next]);
+    int del = Sson[next][0];
+    if(Scnt[del] > 1)
+        Scnt[del] --, Ssplay(del, 0);
+    else Sson[next][0] = 0;
+}
+
+bool KVUpdate(ULL k, ULL v){//Обновление пары «ключ-значение»
+    struct msg res = Tfind(k);
+    if(!res.flag) return false;
+    ULL last = T.value[res.v];
+    if(!Tupdate(k, v)) return false;
+    // printf("tttttt--------\n");
+    SDelete(last);
+    // printf("????");
+    SInsert(v);
+    // printf("!!!!\n");
+}
+
+
+
 int main(){
     while(1){
         printf("input help to get info ...\n");
@@ -358,6 +450,8 @@ int main(){
                 printf("------------------------------------------------------\n");
                 printf("input 'save k v' to save\n");
                 printf("input 'find k' to find v by k\n");
+                printf("input 'update k v' to update the value on a pair of (k, v)");
+                printf("input 'delete k' to delete by k\n");
                 //printf("input 'savefile filename' to save data into file\n");
                 //printf("input 'load filename' to load data from file\n");
                 printf("input 'find_less k' to find the closest smaller value by v\n");
@@ -409,6 +503,14 @@ int main(){
                     else printf(">the value is %llu\n", Sdate[ans]);
                 }
                 break;
+            case 7:
+                scanf("%llu%llu", &k, &v);
+                KVUpdate(k, v);
+                break;
+            case 8:
+                scanf("%llu", &k);
+                Tdelete(k);
+                break;           
             default:
                 printf(">unknow operation\n");
                 break;
