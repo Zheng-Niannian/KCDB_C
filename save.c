@@ -3,14 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-//const char help_[] = {"help"};//Сохранить тип команды
-//const char save_[] = {"save"};
-//const char find_[] = {"find"};
-//const char savefile_[] = {"savefile"};
-//const char load_[] = {"load"};
-// const char find_less_[] = {"find_less"};
-// const char find_more_[] = {"find_more"};
-const char op_[][10] = {{"help"}, {"save"}, {"find"}, {"savefile"}, {"load"}, {"find_less"}, {"find_more"}};
+#define maxn 400000
+const char op_[][11] = {{"help"}, {"save"}, {"find"}, {"savefile"}, {"load"}, {"find_less"}, {"find_more"},{"update"}, {"delete"}};
 
 //Сравните две строки на равенство
 bool check(const char *a, const char *b){
@@ -40,153 +34,236 @@ void SDelete(ULL x);
 struct msg{
     ULL v;
     bool flag;
-    int father;
+    //int father;
 };
 
-#define maxn 100000
-struct Tree{//trie ---> radix tree ---> Adaptive
-    int s[maxn][16];//4bit  0 ~ 2^4 - 1
-    ULL value[maxn]; bool flag[maxn];
-    ULL kv[maxn];//Сохраняем значение текущего узла (без предков)
-    int s_size[maxn];//Количество детей узла
-    int num[maxn];//Количество реальных узлов, содержащихся в текущем узле
-    int recycle[maxn], top;//Пул для восстановления, используемый для сжатия и разделения узлов
+struct Node * new_node(int type);
+struct Node4{
     int tot;
-}T;
-
-void node_init(int x){
+    int key[4];//значение к
+    struct Node* son[4];//Значение дочернего узла в соответствующей позиции
+    // int type[4];
+};
+void node4_init(struct Node4 *p){//инициализация
+    p->tot = 0;
     int i;
-    for(i = 0; i < 16; i ++) T.s[x][i] = 0;
-    T.value[x] = 0;
-    T.flag[x] = false;
-    T.kv[x] = 0;
-    T.s_size[x] = 0;
-    T.num[x] = 0;
+    for(i = 0; i < 4; i ++) p->key[i] = -1;
 }
-
-void tree_init(){
-        T.tot = 0;
-        T.top = 0;
-        int i;
-        for(i = 0; i < 16; i ++) T.s[0][i] = 0;
-        memset(T.value, 0, sizeof(T.value));
-        memset(T.s_size, 0, sizeof(T.s_size));
-        memset(T.num, 0, sizeof(T.num));
-    }
-
-
-void Tsave(char *name){//Проблемы с хранением файлов рассматриваются здесь Структура хранения файлов нуждается в перепроектировании и в данный момент недоступна.
-    FILE* f = fopen(name, "w");//перезаписать
-    fprintf(f, "%d\n", T.tot);
-    int i, j;
-    for(i = 0 ; i <= T.tot; i ++){
-        int have = 0;
-        for(j = 0; j <= 15; j ++){
-            if(T.s[i][j]) have ++;
-        }
-        fprintf(f, "%d ", have);
-        for(j = 0; j <= 15; j ++){
-            if(T.s[i][j]) fprintf(f, "%d %d ", j, T.s[i][j]);    
-        }
-        fprintf(f, "%d ", T.flag[i]);
-        if(T.flag[i]) fprintf(f, "%llu\n", T.value[i]);
-        else fprintf(f, "\n");
-    }
-    fclose(f);
-}
-
-void Tload(char *name){//Загрузка сохраненных данных
-    FILE* f = fopen(name, "r");
-    fscanf(f, "%d", &(T.tot));
-    printf("load... %d\n", T.tot);
-    int i, j;
-    for(i = 0; i <= T.tot; i ++){
-        int have;
-        fscanf(f, "%d", &have);
-        for(j = 0; j < have; j ++){
-            int id, p;
-            fscanf(f, "%d%d", &id, &p);
-            T.s[i][id] = p;
-        }
-        
-        int z = 0;
-        fscanf(f, "%d", &z);
-        if(z){
-            ULL v;
-            fscanf(f, "%llu", &v);
-            T.value[i] = v;
-            T.flag[i] = true;
-            // printf("---- %d %d %llu\n", i, z, v);
-        }
-        else T.flag[i] = false;
-    }
-    fclose(f);
-}
-
-
-
-void merge(int now){
-    if(T.flag[now]){// Текущий узел не может быть завершающим узлом
-        printf("???\n");
+void node4_insert(struct Node4 *p, int key, struct Node * pos){//Вставьте существующий узел или вставьте новый узел
+    if(p->tot >= 4){
+        printf("already full\n");
         return ;
     }
-    if(T.s_size[now] != 1){
-        printf("???\n");
+    (p->tot) ++;
+    int i;
+    for(i = 0; i < 4; i ++){
+        if(p->key[i] != -1) continue;
+        // printf("create new node on %d\n", i);
+        p->key[i] = key;
+        if(pos == NULL) p->son[i] = new_node(1);
+        else p->son[i] = pos;
+        break;
+    }
+}
+
+struct Node16{
+    int tot;
+    int key[16];
+    struct Node* son[16];
+    // int type[16];
+};
+void node16_init(struct Node16 *p){
+    p->tot = 0;
+    int i;
+    for(i = 0; i < 16; i ++) p->key[i] = -1;
+}
+void node16_insert(struct Node16 *p, int key, struct Node * pos){
+    if(p->tot >= 16){
+        printf("already full\n");
         return ;
     }
-    int i, go = 0;
-    for(i = 0; i <= 15; i ++){// найдите дочерние узлы для сжатия
-        if(T.s[now][i]){
-            go = T.s[now][i];
-            T.s[now][i] = 0;//!
-            T.s_size[now] = 0;//!
-            break;
-        }
-    }
-    T.kv[now] = (T.kv[now] << (4 * T.num[go])) + T.kv[go];// Префиксная консолидация
-    // printf("now %d kv after %llu go = %d\n", now, T.kv[now], go);
-    if(T.s_size[go]){// Если у дочернего узла еще есть дети
-        for(i = 0; i <= 15; i ++){// напрямую перезаписываем дочерние узлы в текущий узел
-            T.s[now][i] = T.s[go][i];
-        }
-        T.s_size[now] = T.s_size[go];
-    }
-    if(T.flag[go]){// Если объединенный узел является терминирующим узлом
-        
-        T.flag[go] = false;
-
-    }
-    T.num[now] += T.num[go];
-    T.recycle[++ T.top] = go;//Поместить в пул переработки
-}
-void split(int now, int pos){
-    //radix tree требует разделения и сжатия узлов, 
-    //now — точка, которую нужно разделить, pos — это позиция, которую нужно разделить.
-    int go = T.top >= 1 ? T.recycle[T.top --] : ++ T.tot;//Сначала используйте переработанные узлы, если они есть.
-    // printf("-------------------split now %d pos %d go %d\n", now, pos, go);
-    ULL all = T.kv[now], allnum = T.num[now];
-    T.kv[now] = all / (1 << ((allnum - pos) * 4)), T.num[now] = pos;
-    T.kv[go] = all % (1 << ((allnum - pos) * 4)), T.num[go] = allnum - pos;
-
-    T.s_size[go] = T.s_size[now];// Сначала передайте новому узлу исходное количество детей
+    // p->key[p->tot] = key;
+    // if(pos == NULL){
+    //     p->son[p->tot] = new_node(1);
+    // } else {
+    //     p->son[p->tot] = pos;
+    // }
+    (p->tot) ++;
     int i;
-    for(i = 0; i < 16; i ++) T.s[go][i] = T.s[now][i];
-    T.s_size[now] = 1;//измените количество дочерних узлов исходного узла еще раз
-    for(i = 0; i < 16; i ++) T.s[now][i] = 0;
-    // printf("!!!!!!!!!!! goto %d\n", T.kv[go] / (1 << ((T.num[go] - 1) * 4)));
-    T.s[now][T.kv[go] / (1 << ((T.num[go] - 1) * 4))] = go;// Возьмите только первый блок
-
-    if(T.flag[now]) {
-        T.flag[go] = true;
-        T.value[go] = T.value[now];
-
-        T.flag[now] = false;
-        T.value[now] = 0;
+    for(i = 0; i < 16; i ++){
+        if(p->key[i] != -1) continue;
+        p->key[i] = key;
+        if(pos == NULL) p->son[i] = new_node(1);
+        else p->son[i] = pos;
+        break;
     }
-    
 }
 
-int match(ULL a, int lena, ULL b, int lenb){//Сопоставьте 2 строки 01 в количестве 4 штук, чтобы узнать, сколько блоков может совпасть, len - количество блоков.
+struct Node48{
+    int tot;
+    char key[256];//k->son
+    struct Node * son[48];
+    // int type[48];
+};
+void node48_init(struct Node48 *p){
+    p->tot = 0;
+    int i;
+    for(i = 0; i < 256; i ++) {
+        p->key[i] = -1;
+        p->son[i] = NULL;
+    }
+}
+void node48_insert(struct Node48 *p, int key, struct Node * pos){
+    if(p->key[key] != -1){
+        printf("already exist\n");
+        return ;
+    }
+    if(p->tot >= 48){
+        printf("already full\n");
+        return ;
+    }
+    // p->key[key] = p->tot;
+    // if(pos == NULL){
+    //     p->son[p->tot] = new_node(1);
+    // } else {
+    //     p->son[p->tot] = pos;
+    // }
+    (p->tot) ++;
+    int i;
+    for(i = 0; i < 48; i ++){
+        if(p->son[i] != NULL) continue;
+        p->key[key] = i;
+        if(pos == NULL) {
+            p->son[i] = new_node(1);
+        }
+        else {
+            p->son[i] = pos;
+        } 
+        break;
+    }
+}
+
+struct Node256{
+    struct Node * son[256];
+    int tot;
+    // int type[256];
+};
+void node256_init(struct Node256 *p){
+    int i;
+    p->tot = 0;
+    for(i = 0; i < 256; i ++) p->son[i] = NULL;
+}
+void node256_insert(struct Node256 *p, int key, struct Node * pos){
+    if(p->son[key] != NULL){
+        printf("already exist\n");
+        return ;
+    }
+    (p->tot) ++;
+    if(pos == NULL){
+        p->son[key] = new_node(1);
+    } else {
+        p->son[key] = pos;
+    }
+}
+
+struct Node{
+    struct Node4 * node4;
+    struct Node16 * node16;
+    struct Node48 * node48;
+    struct Node256 * node256;
+    ULL val;
+    int type;
+    short end;//Является ли метка конечным узлом
+    struct Node * end_pos;//Укажите на узел сохраненного значения
+};
+
+
+void node_init(struct Node *p, int type){//Инициализировать узел
+    p->type = type;
+    // printf("????%d\n", p->type);
+    p->end = 0;
+    p->end_pos = NULL;
+    p->node4 = NULL, p->node16 = NULL, p->node48 = NULL, p->node256 = NULL;
+    switch (type)
+    {
+    case 1:
+        p->node4 = (struct Node4 *) malloc(sizeof(struct Node4));
+        node4_init(p->node4);
+        break;
+    case 2:
+        p->node16 = (struct Node16 *) malloc(sizeof(struct Node16));
+        node16_init(p->node16);
+        break;
+    case 3 :
+        p->node48 = (struct Node48 *) malloc(sizeof(struct Node48));
+        node48_init(p->node48);
+        break;
+    case 4:
+        p->node256 = (struct Node256 *) malloc(sizeof(struct Node256));
+        node256_init(p->node256);
+        break;
+    case 5://Это узел хранения ценностей
+        p->val = 0;
+        break;
+    default:
+        printf(">err: type not exist!\n");
+        break;
+    }
+}
+
+void node_free(struct Node *p){//освободить узел
+    switch (p->type)
+    {
+    case 1:
+        free(p->node4);
+        break;
+    case 2:
+        free(p->node16);
+        break;
+    case 3 :
+        free(p->node48);
+        break;
+    case 4:
+        free(p->node256);
+        break;
+    }
+}
+
+struct Node * new_node(int type){
+    struct Node * p = (struct Node *)malloc(sizeof(struct Node));
+    node_init(p, type);
+    return p;
+}
+
+int node_size(struct Node *p){//Запрос количества дочерних узлов узла
+    switch (p->type)
+    {
+    case 1:
+        return p->node4->tot;
+        break;
+    case 2:
+        return p->node16->tot;
+    case 3:
+        return p->node48->tot;
+    case 4:
+        return p->node256->tot;
+    case 5:
+        return 1;
+    default:
+        return 0;
+        break;
+    }
+}
+
+struct Node *root;
+
+void tree_init(){//Инициализировать дерево
+    root = new_node(1);
+    // printf("!!!!!!%d\n",root->type);
+}
+
+
+int match(ULL a, int lena, ULL b, int lenb){ 
     int i = (lena - 1) * 4, j = (lenb - 1) * 4;
     int ans = 0;
     for(; i >= 0 && j >= 0; i -= 4, j -= 4){
@@ -196,136 +273,381 @@ int match(ULL a, int lena, ULL b, int lenb){//Сопоставьте 2 стро�
         ans ++;
         
     }
-    return ans;//Количество совпавших блоков
+    return ans;
 }
 
-void Tinsert(ULL k, ULL v){
-    // printf("--------------------insert\n");
-    int now = 0; ULL rest = k;
+void expansion(struct Node * x){//Узел расширения
+    if(x->type >= 4){
+        printf("wrong type !\n");
+        return ;
+    }
     int i;
-    for(i = 60; i >= 0; i -= 4){
+    switch (x->type)
+    {
+    case 1://node4->16
+        x->type = 2;
+        x->node16 = (struct Node16 *)malloc(sizeof(struct Node16));
+        node16_init(x->node16);
+        // struct Node16 *p = x->node16;
+        // p->tot = x->node4->tot;
+        for(i = 0; i < 4; i ++){
+            if(x->node4->key[i] == -1) continue;
+            node16_insert(x->node16, x->node4->key[i], x->node4->son[i]);
+        }
+        free(x->node4);
+        break;
+    case 2://node16->48
+        x->type = 3;
+        x->node48 = (struct Node48 *)malloc(sizeof(struct Node48));
+        node48_init(x->node48);
+        for(i = 0; i < 16; i ++){
+            if(x->node16->key[i] == -1) continue;
+            node48_insert(x->node48, x->node16->key[i], x->node16->son[i]);
+        }
+        free(x->node16);
+        break;
+    case 3://node48->256
+        x->type = 4;
+        x->node256 = (struct Node256 *)malloc(sizeof(struct Node256));
+        node256_init(x->node256);
+        for(i = 0; i < 256; i ++){
+            if(x->node48->key[i] == -1) continue;
+            node256_insert(x->node256, i, x->node48->son[x->node48->key[i]]);
+        }
+        free(x->node48);
+    default:
+        break;
+    }
+}
+
+void reduce(struct Node *x){//Сжать узел
+
+}
+
+void Tinsert(ULL k, ULL v, int flag){//вставлять
+    // printf("--------------------insert\n");
+    struct Node * now = root; ULL rest = k;
+    int i;
+    for(i = 56; i >= 0; i -= 8){//Принимая 8 бит за единицу
         int x = rest / (1ll << i);
-        // printf("----> i %lld x %d rest %llu\n", (1ll << i), x, rest % (1ll << i));
-        // printf("???now %d go %d num[go] %d\n", now, T.s[now][x], T.num[T.s[now][x]]);
-        if(T.num[T.s[now][x]] > 1){
-            
-            int num = match(rest, (i / 4) + 1, T.kv[T.s[now][x]], T.num[T.s[now][x]]);
-            i -= 4 * (num - 1);
-            if(num == T.num[T.s[now][x]]){
-                now = T.s[now][x];
-            } else {
-                split(T.s[now][x], num);
-                now = T.s[now][x];
+        // printf("--->%d %d %llu now: %p\n", i, x, rest, now);
+        int j;int done = 0;
+        // printf("---- %d\n", now->type);
+        switch (now->type)
+        {
+        case 1://node4
+            // struct Node4 *p = now->node4;
+            for(j = 0; j < 4; j ++){
+                if(now->node4->key[j] == -1) continue;
+                if(now->node4->key[j] == x) {
+                    // printf("!!!!!\n");
+                    now = now->node4->son[j];
+                    done = 1;
+                    break; 
+                }
             }
-        } else {
-            if(T.s[now][x]) now = T.s[now][x];
-            else {
-                if(T.top) {
-                    T.s[now][x] = T.recycle[T.top --];
-                    node_init(T.s[now][x]);
-                } else T.s[now][x] = ++ T.tot;
-                // printf("create new node %d\n", T.tot);
-                T.s_size[now] ++;
-                // int j = 0;
-                // for(j = 0; j < 16; j ++) T.s[T.s[now][x]][j] = 0;
-                T.kv[T.s[now][x]] = x;
-                T.num[T.s[now][x]] = 1;
-                // printf("----> s_size[now] %d\n", T.s_size[now]);
-                if(T.s_size[now] == 1 && !T.value[now] && now != 0){
-                    merge(now);
-                } else now = T.s[now][x];
+            if(done == 0){
+                if(now->node4->tot == 4){//Узел заполнен
+                    expansion(now);//Узел расширения
+                    // printf("----");
+                    node16_insert(now->node16, x, NULL);
+                    for(j = 0; j < 16; j ++){
+                        if(now->node16->key[j] == -1) continue;
+                        // printf("!!!%d %d\n", j, now->node16->key[j]);
+                        if(now->node16->key[j] == x) {
+                            // printf("???%d\n", j);
+                            now = now->node16->son[j];
+                            done = 1;
+                            break; 
+                        }
+                    }
+                } else {
+                    node4_insert(now->node4, x, NULL);
+                    for(j = 0; j < 4; j ++){
+                        if(now->node4->key[j] == -1) continue;
+                        if(now->node4->key[j] == x) {
+                            now = now->node4->son[j];
+                            // printf("^^^^^^\n");
+                            done = 1;
+                            break; 
+                        }
+                    }
+                }
+                
+            }        
+            break;
+        case 2://node16
+            // struct Node16 *p = now->node16;
+            for(j = 0; j < now->node16->tot; j ++){
+                if(now->node16->key[j] == -1) continue;
+                if(now->node16->key[j] == x) {
+                    now = now->node16->son[j];
+                    done = 1;
+                    break; 
+                }
             }
-            
+            if(done == 0){
+                if(now->node16->tot == 16){
+                    expansion(now);
+                    node48_insert(now->node48, x, NULL);
+                    now = now->node48->son[(now->node48->key[x])];
+                } else {
+                    node16_insert(now->node16, x, NULL);
+                    for(j = 0; j < 16; j ++){
+                        if(now->node16->key[j] == -1) continue;
+                        if(now->node16->key[j] == x) {
+                            now = now->node16->son[j];
+                            done = 1;
+                            break; 
+                        }
+                    }
+                }
+                
+            }   
+            break;
+        case 3://node48
+            if(now->node48->key[x] == -1){
+                if(now->node48->tot >= 48){
+                    expansion(now);
+                    node256_insert(now->node256, x, NULL);
+                    now = now->node256->son[x];
+                } else {
+                    node48_insert(now->node48, x, NULL);
+                    now = now->node48->son[x];
+                }
+            } else now = now->node48->son[x];
+            break;
+        case 4://node256
+            if(now->node256->son[x] == NULL) {
+                node256_insert(now->node256, x, NULL);
+            }
+            now = now->node256->son[x];
+            break;
+        default:
+            break;
         }
         rest %= (1ll << i);
     }
-    if(T.flag[now]) {
-        printf(">k = %llu is exist, the value has been overwritten! %d\n", k, now);
+    // printf("now = %p type = %d\n", now, now->type);
+    if(now->end == 1) {//Узел сохраненного значения
+        if(flag == 0) printf(">k = %llu is exist, do you mean to update the value %llu?", k, now->end_pos->val);// the value has been overwritten!\n", k);
+        else {
+            now = now->end_pos;
+            now->val = v;
+            printf(">k = %llu is exist, the value has been overwritten!\n", k);
+        }
     }
-    // printf("!!!%llu\n", T.kv[now]);
-    T.value[now] = v, T.flag[now] = true;
+    else {//create new val node
+        if(flag == 0){
+            now->end = 1;
+            now->end_pos = new_node(5);
+            now = now->end_pos;
+            now->val = v;
+        } else {
+            printf(">k - %llu is absent?\n", k);
+        }
+        
+    }
 }
 
 struct msg Tfind(ULL k){
-    int now = 0; ULL rest = k;
+    struct Node * now = root; ULL rest = k;int last = 0;
     int i;
     // printf("-----------------find\n");//
-    for(i = 60; i >= 0; i -= 4){
+    for(i = 56; i >= 0; i -= 8){
         int x = rest / (1ll << i);
-        // printf("----> i %lld x %d rest %llu\n", (1ll << i), x, rest % (1ll << i));
-        // printf("???now %d go %d num[go] %d\n", now, T.s[now][x], T.num[T.s[now][x]]);
-        if(T.num[T.s[now][x]] > 1){
-            int num = match(rest, (i / 4) + 1, T.kv[T.s[now][x]], T.num[T.s[now][x]]);
-            i -= 4 * (num - 1);
-            // printf("match %d\n", num);
-            if(num == T.num[T.s[now][x]]){
-                now = T.s[now][x];
-            } else {
-                printf(">k = %llu is absent !!!\n", k);
-                return (struct msg){0, false};
-            }
-        }
-        else if(T.s[now][x]) {
-            last = now;
-            now = T.s[now][x];
-        } else {
-            if(!T.flag[now]) {
-                printf(">k = %llu is absent\n", k);
-                return (struct msg){0, false, 0};
-            }
-        }
-        // printf("-----> %d\n", now);
-        rest %= (1ll << i);
-    }
-    if(!T.flag[now]) {
-      printf(">k = %llu is absent\n", k);
-      if(T.s_size[now] == 0){
-         if(last != 0){
-            T.s_size[last] --;
-            for(i = 0; i < 16; i ++){
-                if(T.s[last][i] == now) {
-                    T.s[last][i] = 0;
+        int err = 0;
+        int j;int done = 0;
+        switch (now->type)
+        {
+        case 1://node4
+            // struct Node4 *p = now->node4;
+            for(j = 0; j < 4; j ++){
+                if(now->node4->key[j] == -1) continue;
+                if(now->node4->key[j] == x) {
+                    now = now->node4->son[j];
+                    done = 1;
+                    break; 
                 }
             }
-        } 
-        T.recycle[++ T.top] = now;
+            if(done == 0){
+                err = 1;
+            }        
+            break;
+        case 2://node16
+            // struct Node16 *p = now->node16;
+            for(j = 0; j < 16; j ++){
+                if(now->node16->key[j] == -1) continue;
+                if(now->node16->key[j] == x) {
+                    now = now->node16->son[j];
+                    done = 1;
+                    break; 
+                }
+            }
+            if(done == 0){
+                err = 1;
+            }   
+            break;
+        case 3://node48
+            if(now->node48->key[x] == -1){
+                err = 1;
+            } else now = now->node48->son[x];
+            break;
+        case 4://node256
+            if(now->node256->son[x] == NULL) {
+                err = 1;
+            }
+            now = now->node256->son[x];
+            break;
+        }
+        if(err == 1){
+            printf(">k = %llu is absent\n", k);
+            return (struct msg){0, false};
+        }
+        rest %= (1ll << i);
     }
-    return (struct msg){0, false, 0};
-}
- return (struct msg){now, true, last};       
+    if(now->end == 0) {
+        printf(">k = %llu is absent\n", k);
+        return (struct msg){0, false};
+    }
+    now = now->end_pos;
+    return (struct msg){now->val, true};       
 }
 
-bool Tupdate(ULL k, ULL v){//Измените значение v
+bool Tupdate(ULL k, ULL v){//Изменить значение v
     struct msg res = Tfind(k);
-    if(res.flag == false){//k не существует
-
+    if(res.flag == false){//к не существует
+        //printf(">k = %llu is absent\n", k);//Это сообщение было выведено раньше
         return false;
-    }
-    T.value[res.v] = v;
+    } else Tinsert(k, v, 1);
     return true;
 }
 
+struct Node * last[10000];
+int way[10000];
+int top;
 bool Tdelete(ULL k){
     struct msg res = Tfind(k);
-    if(res.flag == false){//k не существует
+    if(res.flag == false){//к не существует
         printf(">k = %llu is absent\n", k);
         return false;
     } 
-    T.recycle[++ T.top] = res.v;
-    SDelete(T.value[res.v]);
-   
-    int now = res.father;
-    if(T.s_size[res.father] > 0) T.s_size[res.father] --;
+    SDelete(res.v);
+
+    struct Node * now = root; ULL rest = k;
+    top = 0;
     int i;
-    for(i = 0; i < 16; i ++) {
-        if(T.s[res.father][i] == res.v) {
-            T.s[res.father][i] = 0;
+    // printf("-----------------find\n");//
+    for(i = 56; i >= 0; i -= 8){
+        int x = rest / (1ll << i);
+        int err = 0;
+        int j;int done = 0;
+        switch (now->type)
+        {
+        case 1://node4
+            // struct Node4 *p = now->node4;
+            for(j = 0; j < 4; j ++){
+                if(now->node4->key[j] == -1) continue;
+                if(now->node4->key[j] == x) {
+                    now = now->node4->son[j];
+                    done = 1;
+                    break; 
+                }
+            }
+            if(done == 0){
+                err = 1;
+            }        
+            break;
+        case 2://node16
+            // struct Node16 *p = now->node16;
+            for(j = 0; j < 16; j ++){
+                if(now->node16->key[j] == -1) continue;
+                if(now->node16->key[j] == x) {
+                    now = now->node16->son[j];
+                    done = 1;
+                    break; 
+                }
+            }
+            if(done == 0){
+                err = 1;
+            }   
+            break;
+        case 3://node48
+            if(now->node48->key[x] == -1){
+                err = 1;
+            } else now = now->node48->son[x];
+            break;
+        case 4://node256
+            if(now->node256->son[x] == NULL) {
+                err = 1;
+            }
+            now = now->node256->son[x];
             break;
         }
+        last[++ top] = now;//record
+        way[top] = x;
+        if(err == 1){
+            printf(">k = %llu is absent\n", k);
+            return false;
+        }
+        rest %= (1ll << i);
     }
-   
-    
+    if(now->end == 0) {
+        printf(">k = %llu is absent\n", k);
+        return false;
+    }
+    now->end = 0;
+    free(now->end_pos);
+    last[0] = root;
+    while(top){
+        // printf("way is %d pos is %p\n", way[top], last[top]);
+        if(last[top]->end == 1) break;
+        if(node_size(last[top]) >= 1) break;
+        struct Node * now = last[top - 1];
+        switch (now->type)
+        {
+        case 1:
+            for(i = 0 ; i < 4; i ++){
+                if(now->node4->key[i] == -1) continue;
+                if(now->node4->key[i] == way[top]){
+                    now->node4->key[i] = -1;
+                    now->node4->son[i] = NULL;
+                    now->node4->tot --;
+                    break;
+                }
+            }
+            break;
+        case 2:
+            for(i = 0 ; i < 16; i ++){
+                if(now->node16->key[i] == -1) continue;
+                if(now->node16->key[i] == way[top]){
+                    now->node16->key[i] = -1;
+                    now->node16->son[i] = NULL;
+                    now->node16->tot --;
+                    if(now->node16->tot <= 2) reduce(now);
+                    break;
+                }
+            }
+            break;
+        case 3:
+            now->node48->son[now->node48->key[way[top]]] = NULL;
+            now->node48->key[way[top]] = -1;
+            now->node48->tot --;
+            if(now->node48->tot <= 14) reduce(now);
+            break;
+        case 4:
+            now->node256->son[way[top]] = NULL;
+            now->node256->tot --;
+            if(now->node256->tot <= 40) reduce(now);
+            break;
+        default:
+            break;
+        }
+        free(last[top]);
+        top --;
+    }
 }
+
 
 //Структуры данных, отвечающие за поиск
 int Sroot, Sn, Stot;
@@ -463,7 +785,7 @@ int main(){
             case 1:
 
                 scanf("%llu%llu", &k, &v);
-                Tinsert(k, v);
+                Tinsert(k, v, 0);
                 SInsert(k);
                 break;
             
