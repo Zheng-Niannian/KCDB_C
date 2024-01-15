@@ -175,6 +175,10 @@ struct Node{
     int type;
     short end;//Является ли метка конечным узлом
     struct Node * end_pos;//Укажите на узел сохраненного значения
+
+    struct Node * son;
+    ULL s;
+    int have;//Длина строки внутри сжатого узла
 };
 
 
@@ -207,8 +211,11 @@ void node_init(struct Node *p, int type){//Инициализировать уз
         break;
     default:
         printf(">err: type not exist!\n");
+        return ;
         break;
     }
+    p->s = 0;
+    p->have = 0;//node4~node256 могут стать узлами сжатия.
 }
 
 void node_free(struct Node *p){//освободить узел
@@ -263,7 +270,7 @@ void tree_init(){//Инициализировать дерево
 }
 
 
-int match(ULL a, int lena, ULL b, int lenb){ 
+/*int match(ULL a, int lena, ULL b, int lenb){ 
     int i = (lena - 1) * 4, j = (lenb - 1) * 4;
     int ans = 0;
     for(; i >= 0 && j >= 0; i -= 4, j -= 4){
@@ -274,7 +281,7 @@ int match(ULL a, int lena, ULL b, int lenb){
         
     }
     return ans;
-}
+}*/
 
 void expansion(struct Node * x){//Узел расширения
     if(x->type >= 4){
@@ -321,18 +328,143 @@ void expansion(struct Node * x){//Узел расширения
 }
 
 void reduce(struct Node *x){//Сжать узел
+        if(x->type <= 1) {
+         printf("wrong type !\n");
+        return ;       
+    }
+    int i;
+    switch (x->type)
+    {
+    case 2://node16-->node4
+        x->type = 1;
+        x->node4 = (struct Node4 *)malloc(sizeof(struct Node4));
+        node4_init(x->node4);
+        for(i = 0; i < 16; i ++){
+            if(x->node16->key[i] == -1) continue;
+            node4_insert(x->node4, x->node16->key[i], x->node16->son[i]);
+        }
+        free(x->node16);
+        break;
+    case 3://node48-->node16
+        x->type = 2;
+        x->node16 = (struct Node16 *)malloc(sizeof(struct Node16));
+        node16_init(x->node16);
+        for(i = 0; i < 256; i ++){
+            if(x->node48->key[i] == -1) continue;
+            node16_insert(x->node16, i, x->node48->son[x->node48->key[i]]);
+        }
+        free(x->node48);
+        break;
+    case 4://node256-->node48
+        x->type = 3;
+        x->node48 = (struct Node48 *)malloc(sizeof(struct Node48));
+        node48_init(x->node48);
+        for(i = 0; i < 256; i ++){
+            if(x->node256->son[i] == NULL) continue;
+            node48_insert(x->node48, i, x->node256->son[i]);
+        }
+        free(x->node256);
+        break;
+    default:
+        break;
+    }
 
 }
+bool match(struct Node * now, ULL *rest, int *pos, int type){
+    //Попробуйте выполнить сопоставление внутри сжатого узла. Если совпадение не полностью, разделите сжатый узел и перейдите к новому узлу.
+    ULL have = *rest;//При сжатии узлов для сопоставления необходимо сначала выполнить сопоставление внутри узла.
+    int i;//type = 1 означает, что если обнаружено несоответствие или дочерний узел пуст, будет возвращено значение false, которое используется для функции find.
+    ULL ma = now->s; int tmp = now->have;
+    for(i = *pos; i >= 0; i -= 8){
+        if(tmp == 0) break;
+        int x = have / (1ll << i);
+        int y = ma / (1ll << ((tmp - 1) * 8));
+        if(x != y) break;
+        have %= (1ll << i);
+        ma %= (1ll << ((tmp - 1) * 8));
+        tmp --;
+        
+    }
+    if(tmp == 0){//Точное совпадение внутри узла
+        if(have == 0){//rest тоже точно совпадает
+            if(type == 1){//rest совпало, но текущий узел не является узлом сохраненного значения, поэтому узел не может быть найден
+                return false;
+            }
+            struct Node * newNode = (struct Node *)malloc(sizeof(struct Node));//Создайте новый пустой узел
+            newNode->type = now->type;
+            newNode->node4 = now->node4;
+            newNode->node16 = now->node16;
+            newNode->node48 = now->node48;
+            newNode->node256 = now->node256;
+            newNode->have = 0;
+            now->have --;
+            (now->s) >>= 8;
+            now->type = 1;
+            now->node4 = (struct Node4 *)malloc(sizeof(struct Node4));
+            node4_init(now->node4);
+            now->node16 = NULL;
+            now->node48 = NULL;
+            now->node256 = NULL;
+            *rest %= (1ll << 8);
+            *pos = 0;
+            node4_insert(now->node4, *rest, newNode);
+            return false;
+        } else {
+            *rest = have;
+            *pos = i;
+            if(type == 1) return true;
+            return false;
+        }
+    } else {//Неполное совпадение внутри узла
+        if(have == 0 && type == 1){
+            return false;
+        }
+        struct Node * newNode = (struct Node *)malloc(sizeof(struct Node));
+        newNode->type = now->type;
+        newNode->node4 = now->node4;
+        newNode->node16 = now->node16;
+        newNode->node48 = now->node48;
+        newNode->node256 = now->node256;
+        newNode->have = tmp - 1;
+        newNode->s = (now->s) % (1ll << ((tmp - 1) * 8));
+        int key = ((now->s) / (1ll << ((tmp - 1) * 8))) % (1ll << 8);
+        now->type = 1;
+        now->node4 = (struct Node4 *)malloc(sizeof(struct Node4));
+        node4_init(now->node4);
+        now->node16 = NULL;
+        now->node48 = NULL;
+        now->node256 = NULL; 
+        if(have == 0){
+            struct Node * newMidNode = new_node(1);
+            // int midkey = ((now->s) / (1ll << ((tmp) * 8))) % (1ll << 8);
+            (now->s) >>= 1ll << ((tmp + 1) * 8);
+            *rest %= (1ll << 8);
+            *pos = 0;
+            node4_insert(now->node4, *rest, newMidNode);    
+            node4_insert(newMidNode->node4, key, newNode);
+            return false;
+        } 
+        node4_insert(now->node4, key, newNode);//Сделайте новый узел новым дочерним элементом текущего узла.
+        *rest = have;
+        *pos = i;
+        return false;
+    }
+
 
 void Tinsert(ULL k, ULL v, int flag){//вставлять
     // printf("--------------------insert\n");
     struct Node * now = root; ULL rest = k;
     int i;
-    for(i = 56; i >= 0; i -= 8){//Принимая 8 бит за единицу
-        int x = rest / (1ll << i);
+    int stay = 0;
+    for(i = 56; i >= 0; i -= 8){//Принимая 8 бит за единицу      
         // printf("--->%d %d %llu now: %p\n", i, x, rest, now);
         int j;int done = 0;
         // printf("---- %d\n", now->type);
+                if(now->have >= 1 && stay == 0){//Если текущий узел является сжатым узлом и вход в узел происходит впервые
+            match(now, &rest, &i, 0);
+        }
+        stay = 0;
+        int x = rest / (1ll << i);
         switch (now->type)
         {
         case 1://node4
@@ -362,17 +494,27 @@ void Tinsert(ULL k, ULL v, int flag){//вставлять
                         }
                     }
                 } else {
-                    node4_insert(now->node4, x, NULL);
-                    for(j = 0; j < 4; j ++){
-                        if(now->node4->key[j] == -1) continue;
-                        if(now->node4->key[j] == x) {
-                            now = now->node4->son[j];
-                            // printf("^^^^^^\n");
-                            done = 1;
-                            break; 
+                    if(now != root && now->node4->tot == 0 && now->end == 0 && x != rest){
+                        //Если текущий узел не имеет дочерних элементов, не является корнем, не является узлом с хранимым значением и новый узел не будет узлом с сохраненным значением, то необходимо напрямую объединить новый узел с текущим узлом.
+                        //Узлы сжатия не могут быть узлами хранения.
+                        now->s <<= 8;//Сжать новый узел в текущий узел
+                        now->s += x;
+                        now->have ++;
+                        stay = 1;
+                        break;                        
+                    } else{
+                        node4_insert(now->node4, x, NULL);
+                        for(j = 0; j < 4; j ++){
+                            if(now->node4->key[j] == -1) continue;
+                            if(now->node4->key[j] == x) {
+                                now = now->node4->son[j];
+                                // printf("^^^^^^\n");
+                                done = 1;
+                                break; 
+                            }
                         }
-                    }
-                }
+                     }
+                 }
                 
             }        
             break;
@@ -455,9 +597,16 @@ struct msg Tfind(ULL k){
     int i;
     // printf("-----------------find\n");//
     for(i = 56; i >= 0; i -= 8){
-        int x = rest / (1ll << i);
+        //printf("%d\n",i);
         int err = 0;
         int j;int done = 0;
+        if(now->have >= 1){
+            if(match(now, &rest, &i, 1) == false) {
+                printf(">k = %llu is absent!\n", k);
+                return (struct msg){0, false};
+            }
+        }
+        int x = rest / (1ll << i);
         switch (now->type)
         {
         case 1://node4
@@ -539,9 +688,15 @@ bool Tdelete(ULL k){
     int i;
     // printf("-----------------find\n");//
     for(i = 56; i >= 0; i -= 8){
-        int x = rest / (1ll << i);
         int err = 0;
         int j;int done = 0;
+        if(now->have >= 1){
+            if(match(now, &rest, &i, 1) == false) {
+                printf(">k = %llu is absent!\n", k);
+                return false;
+            }
+        }
+        int x = rest / (1ll << i);
         switch (now->type)
         {
         case 1://node4
@@ -760,6 +915,7 @@ bool KVUpdate(ULL k, ULL v){//Обновление пары «ключ-знач�
 
 
 int main(){
+    tree_init();
     while(1){
         printf("input help to get info ...\n");
         char s[100];
@@ -783,7 +939,6 @@ int main(){
                 break;
 
             case 1:
-
                 scanf("%llu%llu", &k, &v);
                 Tinsert(k, v, 0);
                 SInsert(k);
