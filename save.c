@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #define maxn 400000
-const char op_[][11] = {{"help"}, {"save"}, {"find"}, {"savefile"}, {"load"}, {"find_less"}, {"find_more"},{"update"}, {"delete"}};
+const char op_[][12] = {{"help"}, {"save"}, {"find"}, {"savefile"}, {"load"}, {"find_less"}, {"find_more"},{"update"}, {"delete"}};
 
 //Сравните две строки на равенство
 bool check(const char *a, const char *b){
@@ -21,8 +21,8 @@ bool check(const char *a, const char *b){
 //оптимизация
 int get_type(char *s){
     // printf("!!!%s\n", s);
-    int len = 9, i;
-    for(i = 0; i < len; i ++){
+    int len = 10, i;
+    for(i = 0; i < len; i ++){    
         if(check(op_[i], s)) return i;
     }
     // printf("???");
@@ -30,9 +30,10 @@ int get_type(char *s){
 }
 
 #define ULL unsigned long long 
-void SDelete(ULL x);
+void SDelete(char * x);
 struct msg{
-    ULL v;
+    //ULL v;
+    char *v
     bool flag;
     //int father;
 };
@@ -171,13 +172,13 @@ struct Node{
     struct Node16 * node16;
     struct Node48 * node48;
     struct Node256 * node256;
-    ULL val;
+    char *val;
     int type;
     short end;//Является ли метка конечным узлом
     struct Node * end_pos;//Укажите на узел сохраненного значения
 
     struct Node * son;
-    ULL s;
+    char *s;
     int have;//Длина строки внутри сжатого узла
 };
 
@@ -372,10 +373,10 @@ void reduce(struct Node *x){//Сжать узел
 }
 bool match(struct Node * now, ULL *rest, int *pos, int type){
     //Попробуйте выполнить сопоставление внутри сжатого узла. Если совпадение не полностью, разделите сжатый узел и перейдите к новому узлу.
-    ULL have = *rest;//При сжатии узлов для сопоставления необходимо сначала выполнить сопоставление внутри узла.
+    // char *have = *rest;//При сжатии узлов для сопоставления необходимо сначала выполнить сопоставление внутри узла.
     int i;//type = 1 означает, что если обнаружено несоответствие или дочерний узел пуст, будет возвращено значение false, которое используется для функции find.
-    ULL ma = now->s; int tmp = now->have;
-    for(i = *pos; i >= 0; i -= 8){
+    char *ma = now->s; int tmp = now->have;
+    /*for(i = *pos; i >= 0; i -= 8){
         if(tmp == 0) break;
         int x = have / (1ll << i);
         int y = ma / (1ll << ((tmp - 1) * 8));
@@ -384,9 +385,21 @@ bool match(struct Node * now, ULL *rest, int *pos, int type){
         ma %= (1ll << ((tmp - 1) * 8));
         tmp --;
         
+    }*/
+    for(i = *pos; i < strlen(rest); i += 8){
+        if(tmp == 0) break;
+        int j; bool flag = true;
+        for(j = 0; j < 8; j ++){
+            if(rest[i + j] != ma[((now->have) - tmp) * 8 + j]){
+                flag = false;
+                break;
+            }
+        }
+        if(flag == false) break;
+        tmp --;
     }
     if(tmp == 0){//Точное совпадение внутри узла
-        if(have == 0){//rest тоже точно совпадает
+        if(i >= strlen(rest)){//rest тоже точно совпадает
             if(type == 1){//rest совпало, но текущий узел не является узлом сохраненного значения, поэтому узел не может быть найден
                 return false;
             }
@@ -398,7 +411,9 @@ bool match(struct Node * now, ULL *rest, int *pos, int type){
             newNode->node256 = now->node256;
             newNode->have = 0;
             now->have --;
-            (now->s) >>= 8;
+            //(now->s) >>= 8;
+            int s_len = strlen(now->s);
+            now->s[s_len - 8] = 0;
             now->type = 1;
             now->node4 = (struct Node4 *)malloc(sizeof(struct Node4));
             node4_init(now->node4);
@@ -406,73 +421,100 @@ bool match(struct Node * now, ULL *rest, int *pos, int type){
             now->node48 = NULL;
             now->node256 = NULL;
             *rest %= (1ll << 8);
-            *pos = 0;
+            //*pos = 0;
+            *pos = strlen(rest) - 8;
             node4_insert(now->node4, *rest, newNode);
             return false;
         } else {
-            *rest = have;
+            //*rest = have;
             *pos = i;
-            if(type == 1) return true;
+            if(type == 1)  return true;
             return false;
         }
-    } else {//Неполное совпадение внутри узла
-        if(have == 0 && type == 1){
+    } else {//Узел внутри не полностью совпадает
+        if(i >= strlen(rest) && type == 1){//rest было сопоставлено, 
+            //но текущий узел не является узлом сохраненного значения, поэтому ключ не может быть найден.
             return false;
         }
-        struct Node * newNode = (struct Node *)malloc(sizeof(struct Node));
+        struct Node * newNode = (struct Node *)malloc(sizeof(struct Node));//Создайте новый узел сжатия
         newNode->type = now->type;
         newNode->node4 = now->node4;
         newNode->node16 = now->node16;
         newNode->node48 = now->node48;
-        newNode->node256 = now->node256;
+        newNode->node256 = now->node256;//Новый узел напрямую наследует все дочерние узлы текущего узла.
         newNode->have = tmp - 1;
-        newNode->s = (now->s) % (1ll << ((tmp - 1) * 8));
-        int key = ((now->s) / (1ll << ((tmp - 1) * 8))) % (1ll << 8);
+        newNode->val = NULL;
+        newNode->s = NULL;
+        //newNode->s = (now->s) % (1ll << ((tmp - 1) * 8)); 
+        if(newNode->have > 0) {
+             newNode->s = (char *)malloc((newNode->have) * 8 + 1);// Нужно дать еще один, чтобы поставить конечный символ
+             newNode->s[newNode->have * 8] = 0;//конечный символ
+             int rev = now->have - newNode->have;//Остальные сегменты старого узла (включая сегмент, который будет использоваться в качестве «ключевого»)
+             rev *= 8;//Перемещаем в конец оставшегося сегмента
+             int j;
+             for(j = 0; j < newNode->have * 8; j ++){
+                 newNode->s[j] = now->s[rev + j];
+             }
+        }
+        // int key = ((now->s) / (1ll << ((tmp - 1) * 8))) % (1ll << 8);
+        int key_t = (now->have - newNode->have - 1) * 8;
+        int key = 0;
+        int j;
+        for(j = 0; j < 8; j ++) key = (key << 1) + now->s[key_t + j] - '0';// Получаем сегмент, который будет использоваться в качестве ключа
         now->type = 1;
-        now->node4 = (struct Node4 *)malloc(sizeof(struct Node4));
+        now->node4 = (struct Node4 *)malloc(sizeof(struct Node4));// Очистим оригинальные дочерние узлы текущего узла и присоединим новые
         node4_init(now->node4);
         now->node16 = NULL;
         now->node48 = NULL;
         now->node256 = NULL; 
-        if(have == 0){
-            struct Node * newMidNode = new_node(1);
+        if(i >= strlen(rest)){//rest сопоставлен, и необходимо удалить промежуточный узел как узел хранения значений.
+            struct Node * newMidNode = new_node(1);// Создаем новый пустой средний узел
             // int midkey = ((now->s) / (1ll << ((tmp) * 8))) % (1ll << 8);
-            (now->s) >>= 1ll << ((tmp + 1) * 8);
-            *rest %= (1ll << 8);
-            *pos = 0;
-            node4_insert(now->node4, *rest, newMidNode);    
-            node4_insert(newMidNode->node4, key, newNode);
+            int midkey = 0;
+            for(j = strlen(rest) - 8; j < strlen(rest); j ++) midkey = (midkey << 1) + rest[j] - '0';
+            // (now->s) >>= 1ll << ((tmp + 1) * 8);
+
+            now->s[(now->have - newNode->have - 1 - 1) * 8] = 0;//Обрежем сегмент, который является ключом и сегмент, который был выделен в качестве узла хранения значений
+            now->have -= newNode->have + 1 + 1;
+            // *rest %= (1ll << 8);//В rest оставим только последний сегмент
+            // *pos = 0;//pos тоже оставим только последний сегмент
+            *pos = strlen(rest) - 8;
+            node4_insert(now->node4, midkey, newMidNode);// Присоединяем новый средний узел в качестве дочернего узла текущего узла       
+            node4_insert(newMidNode->node4, key, newNode);//Присоединяем новый узел к новому среднему узлу
             return false;
         } 
-        node4_insert(now->node4, key, newNode);//Сделайте новый узел новым дочерним элементом текущего узла.
-        *rest = have;
+        now->s[(now->have - newNode->have - 1) * 8] = 0;
+        now->have -= newNode->have + 1;
+        node4_insert(now->node4, key, newNode);
+        // *rest = have;
         *pos = i;
         return false;
     }
 
-
-void Tinsert(ULL k, ULL v, int flag){//вставлять
-    // printf("--------------------insert\n");
-    struct Node * now = root; ULL rest = k;
+void Tinsert(char * k, char * v, int flag){//вставлять
+    struct Node * now = root; //ULL rest = k;
+    char rest[100];
+    memcpy(rest, k, sizeof(rest));
+    int rest_len = strlen(rest);
     int i;
     int stay = 0;
-    for(i = 56; i >= 0; i -= 8){//Принимая 8 бит за единицу      
+    for(i = 0; i < rest_len; i += 8){//Принимая 8 бит за единицу      
         // printf("--->%d %d %llu now: %p\n", i, x, rest, now);
         int j;int done = 0;
         // printf("---- %d\n", now->type);
-                if(now->have >= 1 && stay == 0){//Если текущий узел является сжатым узлом и вход в узел происходит впервые
-            match(now, &rest, &i, 0);
+        if(now->have >= 1 && stay == 0){//Если текущий узел является сжатым узлом и вход в узел происходит впервые
+            match(now, rest, &i, 0);
         }
         stay = 0;
-        int x = rest / (1ll << i);
+        //int x = rest / (1ll << i);
+        int x = 0;
+        for(j = i; j < i + 8; j ++) x = (x << 1) + rest[j] - '0';
         switch (now->type)
         {
         case 1://node4
-            // struct Node4 *p = now->node4;
             for(j = 0; j < 4; j ++){
                 if(now->node4->key[j] == -1) continue;
                 if(now->node4->key[j] == x) {
-                    // printf("!!!!!\n");
                     now = now->node4->son[j];
                     done = 1;
                     break; 
@@ -494,14 +536,25 @@ void Tinsert(ULL k, ULL v, int flag){//вставлять
                         }
                     }
                 } else {
-                    if(now != root && now->node4->tot == 0 && now->end == 0 && x != rest){
+                    if(now != root && now->node4->tot == 0 && now->end == 0 &&  i + 8 < rest_len){
                         //Если текущий узел не имеет дочерних элементов, не является корнем, не является узлом с хранимым значением и новый узел не будет узлом с сохраненным значением, то необходимо напрямую объединить новый узел с текущим узлом.
                         //Узлы сжатия не могут быть узлами хранения.
-                        now->s <<= 8;//Сжать новый узел в текущий узел
-                        now->s += x;
+                       // now->s <<= 8;//Сжать новый узел в текущий узел
+                       //now->s += x;
+                        char * tmp;
+                        if(now->s == NULL) {
+                            tmp = (char *)malloc(9);
+                        } else {
+                            tmp = (char *)malloc(strlen(now->s) + 1 + 8);
+                            memcpy(tmp, now->s, sizeof(now->s));
+                        }
+                        int tt = strlen(tmp);
+                        int l;
+                        for(l = tt + 7; l >= tt; l --) tmp[l] = x % 2, x >>= 1;
+                        tmp[tt + 8] = 0;//\0
                         now->have ++;
                         stay = 1;
-                        break;                        
+                        break;                      
                     } else{
                         node4_insert(now->node4, x, NULL);
                         for(j = 0; j < 4; j ++){
@@ -568,7 +621,7 @@ void Tinsert(ULL k, ULL v, int flag){//вставлять
         default:
             break;
         }
-        rest %= (1ll << i);
+       // rest %= (1ll << i);
     }
     // printf("now = %p type = %d\n", now, now->type);
     if(now->end == 1) {//Узел сохраненного значения
@@ -592,21 +645,24 @@ void Tinsert(ULL k, ULL v, int flag){//вставлять
     }
 }
 
-struct msg Tfind(ULL k){
-    struct Node * now = root; ULL rest = k;int last = 0;
+struct msg Tfind(char *k){
+    struct Node * now = root; char rest[100];int last = 0;
     int i;
+    memcpy(rest, k, sizeof(rest));
     // printf("-----------------find\n");//
-    for(i = 56; i >= 0; i -= 8){
+    for(i = 0; i < strlen(rest); i += 8){
         //printf("%d\n",i);
         int err = 0;
         int j;int done = 0;
         if(now->have >= 1){
-            if(match(now, &rest, &i, 1) == false) {
-                printf(">k = %llu is absent!\n", k);
-                return (struct msg){0, false};
+            if(match(now, rest + i, &i, 1) == false) {
+                printf(">k = %s is absent!\n", k);
+                return (struct msg){NULL, false};
             }
         }
-        int x = rest / (1ll << i);
+        //int x = rest / (1ll << i);
+        int x = 0;
+        for(j = i; j < i + 8; j ++) x = (x << 1) + rest[j] - '0';
         switch (now->type)
         {
         case 1://node4
@@ -650,20 +706,20 @@ struct msg Tfind(ULL k){
             break;
         }
         if(err == 1){
-            printf(">k = %llu is absent\n", k);
-            return (struct msg){0, false};
+            printf(">k = %s is absent\n", k);
+            return (struct msg){NULL, false};
         }
-        rest %= (1ll << i);
+        //rest %= (1ll << i);
     }
     if(now->end == 0) {
-        printf(">k = %llu is absent\n", k);
-        return (struct msg){0, false};
+        printf(">k = %s is absent\n", k);
+        return (struct msg){NULL, false};
     }
     now = now->end_pos;
     return (struct msg){now->val, true};       
 }
 
-bool Tupdate(ULL k, ULL v){//Изменить значение v
+bool Tupdate(char * k, char * v){//Изменить значение v
     struct msg res = Tfind(k);
     if(res.flag == false){//к не существует
         //printf(">k = %llu is absent\n", k);//Это сообщение было выведено раньше
@@ -675,28 +731,34 @@ bool Tupdate(ULL k, ULL v){//Изменить значение v
 struct Node * last[10000];
 int way[10000];
 int top;
-bool Tdelete(ULL k){
+bool Tdelete(char *k){
     struct msg res = Tfind(k);
     if(res.flag == false){//к не существует
-        printf(">k = %llu is absent\n", k);
+        printf(">k = %s is absent!\n", k);
         return false;
     } 
-    SDelete(res.v);
+    //SDelete(res.v);
 
-    struct Node * now = root; ULL rest = k;
+    struct Node * now = root;// ULL rest = k;
+    char rest[100];
+    memcpy(rest, k, sizeof(rest));
     top = 0;
     int i;
     // printf("-----------------find\n");//
-    for(i = 56; i >= 0; i -= 8){
+    int rest_len = strlen(rest);
+    for(i = 0; i < rest_len; i += 8){
         int err = 0;
         int j;int done = 0;
         if(now->have >= 1){
-            if(match(now, &rest, &i, 1) == false) {
-                printf(">k = %llu is absent!\n", k);
+            if(match(now, rest + i, &i, 1) == false) {
+                printf(">k = %s is absent!\n", k);
                 return false;
             }
         }
-        int x = rest / (1ll << i);
+        //int x = rest / (1ll << i);
+        int x = 0;
+        for(j = i; j < i + 8; j ++) x = (x << 1) + rest[j] - '0';
+        
         switch (now->type)
         {
         case 1://node4
@@ -742,13 +804,13 @@ bool Tdelete(ULL k){
         last[++ top] = now;//record
         way[top] = x;
         if(err == 1){
-            printf(">k = %llu is absent\n", k);
+            printf(">k = %s is absent\n", k);
             return false;
         }
-        rest %= (1ll << i);
+       //rest %= (1ll << i);
     }
     if(now->end == 0) {
-        printf(">k = %llu is absent\n", k);
+        printf(">k = %s is absent\n", k);
         return false;
     }
     now->end = 0;
@@ -807,7 +869,7 @@ bool Tdelete(ULL k){
 //Структуры данных, отвечающие за поиск
 int Sroot, Sn, Stot;
 int Ssize[maxn], Sf[maxn], Scnt[maxn], Sson[maxn][2];
-ULL Sdate[maxn];
+char* Sdate[maxn];
 //size - это сумма cnt поддеревьев, в которых находится узел
 void Supdate(int x)
 {
@@ -834,49 +896,75 @@ void Ssplay(int x, int goal)//splay
     }
     if(!goal) Sroot = x;
 }
+
+int judge(char * x, char * y){//Сравните размер двух струн 01，"1"->"x > y", "0"->"x = y", "-1"->"x < y"
+    int xx = strlen(x), yy = strlen(y);
+    // int a = 0, b = 0;
+    // while(a < xx && x[a] == '0') ++ a;
+    // while(b < yy && y[b] == '0') ++ b;
+    if(xx > yy) return 1;
+    if(xx < yy) return -1;
+    int i;
+    for(i = 0; i < xx; i ++){
+        if(x[i] < y[i]) return -1;
+        if(x[i] > y[i]) return 1;
+    }
+    return 0;
+}
+
+
+
 void SInsert(ULL x)//Вставить узел
 {
     int now = Sroot,fa=0;
-    while(now && Sdate[now] != x)
+    // while(now && Sdate[now] != x)
+    while(now && judge(Sdate[now], x) != 0)
     {
         fa = now;
-        now = Sson[now][x > Sdate[now]];
+        // now = Sson[now][x > Sdate[now]];
+        now = Sson[now][judge(x, Sdate[now]) >= 1];
     }
     if(now)Scnt[now]++;
     else 
     {
+        // printf("create %d %d\n", now, fa);
+        // printf("!!!!!%llu\n", Sson[0][0]);
         now = ++Stot;
-        if(fa) Sson[fa][x > Sdate[fa]] = now;
+        if(fa) Sson[fa][judge(x, Sdate[fa]) >= 1] = now;
         Sson[Stot][0] = Sson[Stot][1] = 0;
         Sf[Stot] = fa, Sdate[Stot] = x;
         Scnt[Stot] = Ssize[Stot] = 1;
+        // printf("!!!!!%llu\n", Sson[0][0]);
     }
     Ssplay(now,0);
+    // printf("!!!!!%llu\n", Sson[0][0]);
 }
 
-void Sfind(ULL x)
+void Sfind(char * x)
 {
     int now = Sroot;
-    if(!now)return ;
-    while(Sson[now][x > Sdate[now]] && x != Sdate[now]){
-        now = Sson[now][x > Sdate[now]];
+    if(!now) return ;
+    while(Sson[now][judge(x, Sdate[now]) >= 1] && judge(x, Sdate[now]) != 0){
+        now = Sson[now][judge(x, Sdate[now]) >= 1];
     }
     Ssplay(now,0);
 }
 
-int SNext(ULL x,int f)//Операция поиска
+int SNext(char * x, int f)//Операция поиска
 {
     Sfind(x);
     int now = Sroot;
-    if((Sdate[now]>x && f) || (Sdate[now]<x && !f))return now;
+    if((judge(Sdate[now], x) >= 1 && f) || (judge(Sdate[now], x) <= -1 && !f))return now;
+    // printf("!!!%llu\n", Sdate[now]);
     now = Sson[now][f];
-    while(Sson[now][f^1]) {
+    // printf("!!!%llu %d %d\n", Sdate[now], now, Sson[now][0]);
+    while(now && Sson[now][f^1]) {
         now = Sson[now][f^1];
     }
     return now;
 }
 
-void SDelete(ULL x)//Удаление по значению
+void SDelete(char * x)//Удаление по значению
 {
     int last=SNext(x, 0);
     int next=SNext(x, 1);
@@ -900,10 +988,10 @@ void SDelete(ULL x)//Удаление по значению
     else Sson[next][0] = 0;
 }
 
-bool KVUpdate(ULL k, ULL v){//Обновление пары «ключ-значение»
+bool KVUpdate(char * k, char * v){//Обновление пары «ключ-значение»
     struct msg res = Tfind(k);
     if(!res.flag) return false;
-    ULL last = T.value[res.v];
+    //ULL last = T.value[res.v];
     if(!Tupdate(k, v)) return false;
     // printf("tttttt--------\n");
     SDelete(last);
@@ -914,14 +1002,18 @@ bool KVUpdate(ULL k, ULL v){//Обновление пары «ключ-знач�
 
 
 
-int main(){
-    tree_init();
+void work(int opt, FILE* f){
+    FILE * fr = NULL;
+    if(opt == 1) fr = fopen("tmp.save", "w");
     while(1){
-        printf("input help to get info ...\n");
+        if(opt == 0) printf("input help to get info ...\n");
         char s[100];
-        scanf("%s", s);
-        ULL k, v;                
-        char name[100];
+        if(opt == 1) fscanf(f, "%s", s);
+        else scanf("%s", s);
+        // ULL k, v;     
+        char *k, *v;           
+        // char name[100];
+        int k_len, kk_len, j;
         switch (get_type(s))
         {
             case 0:
@@ -934,23 +1026,58 @@ int main(){
                 //printf("input 'load filename' to load data from file\n");
                 printf("input 'find_less k' to find the closest smaller value by v\n");
                 printf("input 'find_more k' to find the closest bigger value by v\n");
+                printf("please input quit to exit\n");
                 //printf("length of 'filename' must < 100\n");
                 printf("------------------------------------------------------\n");
                 break;
 
             case 1:
-                scanf("%llu%llu", &k, &v);
+                k = (char *)malloc(100);
+                v = (char *)malloc(100);
+                if(opt == 1) {
+                    fscanf(f, "%s%s", k, v);
+                    fprintf(fr, "save %s %s\n", k, v);
+                }
+                else {
+                    scanf("%s%s", k, v);
+                    fprintf(f, "save %s %s\n", k, v);
+                }
+                k_len = strlen(k);
+                if(k_len % 8 != 0) {
+                    kk_len = (k_len / 8) * 8 + 8;
+                    k[kk_len] = 0;
+                    for(j = kk_len - 1; j >= 0; j --) {
+                        if(k_len >= 0)
+                           k[j] = k[k_len --];
+                        else k[j] = '0';
+                    }
+                }
                 Tinsert(k, v, 0);
-                SInsert(k);
+                //printf("!?!?!?%llu\n", Sson[0][0]);
+                // printf("???%s\n", v);
+                SInsert(v);
+                //printf("!?!?!?%llu\n", Sson[0][0]);
                 break;
             
             case 2:
-                scanf("%llu", &k);
+                k = (char *)malloc(100);
+                if(opt == 1) fscanf(f, "%s", k);
+                else scanf("%s", k);
+                k_len = strlen(k);
+                if(k_len % 8 != 0) {
+                    kk_len = (k_len / 8) * 8 + 8;
+                    k[kk_len] = 0;
+                    for(j = kk_len - 1; j >= 0; j --) {
+                        if(k_len >= 0)
+                           k[j] = k[k_len --];
+                        else k[j] = '0';
+                    }
+                }
                 struct msg res = Tfind(k);
                 if(res.flag) {
-                    printf(">the value is %llu\n", res.v);
+                    printf(">the value is %s\n", res.v);
                 }
-                break;            
+                break;         
            // case 3:
            //     scanf("%s", name);
            //     Tsave(name);
@@ -960,38 +1087,110 @@ int main(){
            //     Tload(name);
            //    break;  
             case 5:
-                scanf("%llu", &v);
+                v = (char *)malloc(100);
+                if(opt == 1) fscanf(f, "%s", v);
+                else scanf("%s", v);
                 if(Ssize[Sroot] <= 0){
                     printf("data empty\n");
                 } else {
                     int ans = SNext(v, 0);
                     // printf("---> ans %d\n", ans);
-                    if(ans == 0) printf("no one is smaller than %llu\n", v);
-                    else printf(">the value is %llu\n", Sdate[ans]);
+                    if(ans == 0) printf("no one is smaller than %s\n", v);
+                    else printf(">the value is %s\n", Sdate[ans]);
                 }
                 break;
             case 6:
-                scanf("%llu", &v);
+                v = (char *)malloc(100);
+                if(opt == 1) fscanf(f, "%s", v);
+                else scanf("%s", v);
                 if(Ssize[Sroot] <= 0){
                     printf("data empty\n");
                 } else {
                     int ans = SNext(v, 1);
-                    if(ans == 0) printf("no one is smaller than %llu\n", v);
-                    else printf(">the value is %llu\n", Sdate[ans]);
+                    if(ans == 0) printf("no one is bigger than %s\n", v);
+                    else printf(">the value is %s\n", Sdate[ans]);
                 }
                 break;
             case 7:
-                scanf("%llu%llu", &k, &v);
+                k = (char *)malloc(100);
+                v = (char *)malloc(100);
+                if(opt == 1) {
+                    fscanf(f, "%s%s", k, v);
+                    fprintf(fr, "update %s %s\n", k, v);
+                }
+                else {
+                    scanf("%s%s", k, v);
+                    fprintf(f, "update %s %s\n", k, v);
+                }
+                k_len = strlen(k);
+                if(k_len % 8 != 0) {
+                    kk_len = (k_len / 8) * 8 + 8;
+                    k[kk_len] = 0;//结束符
+                    for(j = kk_len - 1; j >= 0; j --) {
+                        if(k_len >= 0)
+                           k[j] = k[k_len --];
+                        else k[j] = '0';
+                    }
+                }
                 KVUpdate(k, v);
                 break;
             case 8:
-                scanf("%llu", &k);
+                k = (char *)malloc(100);
+                if(opt == 1) fscanf(f, "%s", k);
+                else scanf("%s", k);
+                k_len = strlen(k);
+                if(k_len % 8 != 0) {
+                    kk_len = (k_len / 8) * 8 + 8;
+                    k[kk_len] = 0;
+                    for(j = kk_len - 1; j >= 0; j --) {
+                        if(k_len >= 0)
+                           k[j] = k[k_len --];
+                        else k[j] = '0';
+                    }
+                }
                 Tdelete(k);
-                break;           
+                break;       
+            case 9:
+                if(opt == 1) fclose(fr);
+                return ;
+                break;
             default:
                 printf(">unknow operation\n");
                 break;
         }
     }
+}
+
+int main(){
+    tree_init();
+    printf("do you want to load from file?(yes or no)");
+    char opt[10];
+    scanf("%s", opt);
+    char a[10] = "yes", b[10] = "no";
+    // char aa[10] = "111", bb[10] = "00011";
+    // printf("!!!%d\n", judge(aa, bb));
+    if(check(opt, a) == true) {
+        FILE* f = fopen("save.save", "r");
+        if(f == NULL){
+            printf("error while open file\n");
+        } else {
+            work(1, f);
+            fclose(f);
+            remove("save.save");
+            system("cp tmp.save save.save");
+            remove("tmp.save");
+            f = fopen("save.save", "a");
+            work(0, f);
+            fprintf(f, "quit\n");
+            fclose(f);
+        }
+    } else {
+        FILE * f = fopen("save.save", "w");
+        work(0, f);
+        fprintf(f, "quit\n");
+        fclose(f);
+    }
+
     return 0;
 }
+
