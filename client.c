@@ -19,11 +19,13 @@ void server_init(struct sockaddr_in *p, int port_){
     p -> sin_addr.s_addr = htonl(INADDR_ANY);
 }
 
-int tcp_(char *server_ip, int server_port, char *data){
+int tcp_(char *server_ip, int server_port){
     int fd = -1;
     int ad_len = 0;
     char buf[1024];
     memset(buf, 0, sizeof(buf));
+    fgets(buf, sizeof(buf), stdin);//read whole line
+    // printf("???%s", buf);
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if(fd < 0){
         printf("tcp: socket create failed\n");
@@ -41,10 +43,10 @@ int tcp_(char *server_ip, int server_port, char *data){
         return -1;
     }
 
-    write(fd, data, strlen(data));
-    printf("send data to server: %s\n", data);
-
-    ret = read(fd, buf, sizeof(buf));
+    write(fd, buf, 1024);//Отправка информации на сервер. must be 1024
+    printf("send data to server: %s\n", buf);
+    memset(buf, 0, sizeof(buf));
+    ret = read(fd, buf, sizeof(buf));//Принятие сообщения от сервера.
     if (ret > 0) {
         printf("receive data: %s\n", buf);
     } else if (ret < 0) {
@@ -58,11 +60,10 @@ int tcp_(char *server_ip, int server_port, char *data){
 int main(int argc, char *argv[])
 {
     if (argc < 4) {
-        printf("example: ./client 127.0.0.1 1313 helloworld\n");
+        printf("example: ./client 127.0.0.1 1313\nsave 10 10\n");
         return -1;
     }
-
-    int flag = tcp_(argv[1], atoi(argv[2]), argv[3]);
+    int flag = tcp_(argv[1], atoi(argv[2]));
     switch (flag)
     {
         case 0:
