@@ -1,22 +1,21 @@
+
 #include "kvdb.h"
-/*Управляйте информацией о клиенте.*/
+// Структура управления сервером
 typedef struct kv_server_manage_s {
-    int fd;
-    int port;
-    pthread_mutex_t mutex;
-    struct epollop server_eop;
+    int fd;// Файловый дескриптор сервера
+    int port;// Порт сервера
+    pthread_mutex_t mutex;// Мьютекс для синхронизации доступа к данным сервера
+    struct epollop server_eop;// Данные epoll для сервера
 } kv_server_manage_t;
-
-/*Управляйте информацией о сервере.*/
+// Структура клиента
 typedef struct kv_client_s {
-    int client_fd;
-    pthread_t pid;
-    struct epollop client_eop;
+    int client_fd;// Файловый дескриптор клиента
+    pthread_t pid;// Идентификатор потока клиента
+    struct epollop client_eop;// Данные epoll для клиента
 } kv_client_t;
-
+// Глобальная переменная для управления сервером
 kv_server_manage_t g_kv_server_m;
-/*Функция для обработки сообщения «set», используемого для обработки сообщения об установке пар ключ-значение,
-отправленного клиентом, и сохранения пар ключ-значение в базе данных. */
+// Функция обработки сообщения о установке значения
 static void kv_do_set_msg(char *msg)
 {
     kv_set_msg_t *set_msg = (kv_set_msg_t *)msg;
@@ -33,8 +32,7 @@ static void kv_do_set_msg(char *msg)
     
     return;
 }
-
-/*Получаем сообщение «get», отправленное клиентом, и выполняем соответствующие операции обработки*/
+// Функция обработки сообщения о получении значения
 static void kv_do_get_msg(int fd, char *msg)
 {
     kv_key_msg_t *set_msg = (kv_key_msg_t *)msg;
@@ -68,7 +66,7 @@ static void kv_do_get_msg(int fd, char *msg)
     
     return;
 }
-/*Используется для удаления соответствующей пары ключ-значение из базы данных на основе ключа.*/
+// Функция обработки сообщения об удалении значения
 static void kv_do_del_msg(int fd, char *msg)
 {
     kv_key_msg_t *set_msg = (kv_key_msg_t *)msg;
@@ -91,7 +89,7 @@ static void kv_do_del_msg(int fd, char *msg)
     
     return;
 }
-
+// Функция обработки сообщения о поиске значения
 static void kv_do_search_msg(int fd, char *msg)
 {
     kv_key_msg_t *set_msg = (kv_key_msg_t *)msg;
@@ -110,11 +108,16 @@ static void kv_do_search_msg(int fd, char *msg)
     
     int ret = kvdb_get_value_key(value, &key, &key_len);
     if (ret == -1) {
-        ;
-    } else {
-        len += key_len;
-    }
+		KV_DEBUG("Failed to get value key\n");
+        return;
+    }        
+    len += key_len;  
     vmsg = malloc(len);
+	if (vmsg == NULL) {
+        KV_DEBUG("Failed to allocate memory for value message\n");
+        free(key); 
+        return;
+    }
     memset(vmsg, 0x00, len);
     vmsg->value_len = htons(key_len);
     memcpy(vmsg->data, key, key_len);
@@ -125,7 +128,7 @@ static void kv_do_search_msg(int fd, char *msg)
     
     return;
 }
-
+// Функция обработки сообщения от клиента
 static int kv_thread_do_client_msg(int fd, kv_client_t *client)
 {
     int size, ret, count;
@@ -136,7 +139,7 @@ static int kv_thread_do_client_msg(int fd, kv_client_t *client)
 	kv_head_msg_t *msg_hdr;
 	unsigned short type;
 
-    /* Read header */
+    /* Чтение заголовка */
     size = kv_readn(fd, h_buf, KV_HDR_LEN);
     if (size == -1) {
 		KV_DEBUG("kv tcp read size 0, client fd over, i am to over\n");
@@ -163,7 +166,7 @@ static int kv_thread_do_client_msg(int fd, kv_client_t *client)
 		return 0;
 	}
 
-	/* do client msg */
+	/* Обработка сообщения клиента */
 	switch (type) {
     case KV_MSG_TYPE_SET:
         kv_do_set_msg(r_buf);
@@ -187,7 +190,7 @@ static int kv_thread_do_client_msg(int fd, kv_client_t *client)
 
 	return 0;
 }
-
+// Функция работы потока клиента
 static void *kv_thread_work_running(void *param)
 {
     int ret, i, sockfd, do_ret;
@@ -195,14 +198,14 @@ static void *kv_thread_work_running(void *param)
 
     KV_DEBUG("new client thread running..........\n");
 
-	pthread_detach(pthread_self());
-    (void)kv_epoll_init(&client->client_eop, 32);
-    kv_epoll_addfd(client->client_eop.epfd, client->client_fd);
+	pthread_detach(pthread_self());// Отсоединение потока
+    (void)kv_epoll_init(&client->client_eop, 32);// Инициализация epoll для клиента
+    kv_epoll_addfd(client->client_eop.epfd, client->client_fd);// Добавление файлового дескриптора клиента в epoll
 
 	while (1) {
-        /* epoll waits for messages from the client */
+        /* epoll ждет сообщений от клиента */
         ret = epoll_wait(client->client_eop.epfd, client->client_eop.events,
-                    client->client_eop.nevents, -1);
+                    client->client_eop.nevents, -1);// Ожидание сообщений от клиента с помощью epoll
         if (ret < 0) {
             KV_DEBUG("client %d thread epoll wait failure\n", client->client_fd);
             break;
@@ -210,7 +213,7 @@ static void *kv_thread_work_running(void *param)
 
         for (i = 0; i < ret; i++ ) {
             sockfd = client->client_eop.events[i].data.fd;
-            /* Client fd can read and process client messages */
+             /* Клиентский fd может считывать и обрабатывать сообщения клиента */
             if (client->client_eop.events[i].events & EPOLLIN) {
                 do_ret = kv_thread_do_client_msg(sockfd, client);
                 if (do_ret == 1) {
@@ -230,7 +233,7 @@ __end:
     free(client);
     return NULL;
 }
-
+// Функция epoll сервера
 void kv_server_epoll(struct epoll_event *events, int number, int epollfd, int tcp_listenfd)
 {
 	int i, addr_len;
@@ -242,13 +245,14 @@ void kv_server_epoll(struct epoll_event *events, int number, int epollfd, int tc
 	char ipaddr[INET_ADDRSTRLEN] = { 0 };
     kv_client_t *client;
 
+    /* Обход событий обработки файлового дескриптора каждого клиента */
     for (i = 0; i < number; i++ ) {
         sockfd = events[i].data.fd;
         if (events[i].events & EPOLLIN) {
             if (sockfd == tcp_listenfd) {
                 client_addrlength = sizeof(peer);
 
-                /* Client connection event, call accept to handle the new client */
+                /* Событие подключения клиента, вызов accept для обработки нового клиента */
                 connfd = accept(tcp_listenfd, (struct sockaddr*)&peer, &client_addrlength);
         		port = ntohs(peer.sin_port);
 
@@ -269,8 +273,7 @@ void kv_server_epoll(struct epoll_event *events, int number, int epollfd, int tc
 
 	return;
 }
-
-/*Инициализируем TCP-сокет сервера, привязываем его к указанному порту, а затем начинаем прослушивать запросы на соединение. */
+// Инициализация сокета TCP сервера
 static int kv_server_tcp_socket_init(int port)
 {
     int ret;
@@ -325,10 +328,12 @@ int main(int argc, char *argv[])
     g_kv_server_m.port = atoi(argv[1]);
     port = g_kv_server_m.port;
 
+    /* Инициализация структуры epoll */
     if (kv_epoll_init(&g_kv_server_m.server_eop, 32) == -1) {
         return -1;
     }
 
+    //* Инициализация сокета */
     if (kv_server_tcp_socket_init(port) == -1) {
         return -1;
     }
@@ -337,6 +342,7 @@ int main(int argc, char *argv[])
     pthread_mutex_init(&g_kv_server_m.mutex, NULL);
 	KV_DEBUG("Server Started on port %d, Accepting connections\n", port);
 
+    /* Ожидание подключения клиента */
 	while (1) {
         ret = epoll_wait(g_kv_server_m.server_eop.epfd, g_kv_server_m.server_eop.events,
                     g_kv_server_m.server_eop.nevents, -1);
@@ -344,9 +350,11 @@ int main(int argc, char *argv[])
             KV_DEBUG( "epoll wait failure\n" );
             break;
         }else if (ret == 0) {
+            // Нет событий за период времени ожидания
             continue;
         }
 
+        /* Обработка событий от клиента */
         kv_server_epoll(g_kv_server_m.server_eop.events, ret, g_kv_server_m.server_eop.epfd,
             g_kv_server_m.fd);
     }
