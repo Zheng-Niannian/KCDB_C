@@ -1,0 +1,282 @@
+zheng1@zheng:~/KVF/KVFileClient$ ./KVFileClient
+bind handler for dataType:4
+bind handler for dataType:3
+113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+expected len:22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header not finish
+find small piece,construct header not finish
+find small piece,construct header success,message type:3
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:5, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:6, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:7, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:8, totalLength:0
+recalculate message length finish,message length:22
+use count:1
+write index:8
+[INFO]Received stream data, count:1, totalCount:9, totalLength:22
+write index:8
+[INFO]Received stream data, count:1, totalCount:10, totalLength:22
+write index:9
+[INFO]Received stream data, count:1, totalCount:11, totalLength:22
+write index:10
+[INFO]Received stream data, count:1, totalCount:12, totalLength:22
+write index:11
+[INFO]Received stream data, count:1, totalCount:13, totalLength:22
+write index:12
+[INFO]Received stream data, count:1, totalCount:14, totalLength:22
+write index:13
+[INFO]Received stream data, count:1, totalCount:15, totalLength:22
+write index:14
+[INFO]Received stream data, count:1, totalCount:16, totalLength:22
+write index:15
+[INFO]Received stream data, count:1, totalCount:17, totalLength:22
+write index:16
+[INFO]Received stream data, count:1, totalCount:18, totalLength:22
+write index:17
+[INFO]Received stream data, count:1, totalCount:19, totalLength:22
+write index:18
+[INFO]Received stream data, count:1, totalCount:20, totalLength:22
+write index:19
+[INFO]Received stream data, count:1, totalCount:21, totalLength:22
+write index:20
+[INFO]Received stream data, count:1, totalCount:22, totalLength:22
+write index:21
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find query key request
+in handle message,after deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+payload data type:3
+QueryKeyRequest.value:query_key_test
+bind handler for dataType:4
+bind handler for dataType:3
+113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+expected len:22
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header success,message type:3
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:9, totalCount:13, totalLength:0
+recalculate message length finish,message length:22
+use count:4
+write index:8
+[INFO]Received stream data, count:7, totalCount:20, totalLength:22
+write index:13
+[INFO]Received stream data, count:2, totalCount:22, totalLength:22
+write index:20
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find query key request
+in handle message,after deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+payload data type:3
+QueryKeyRequest.value:query_key_test
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header success,message type:3
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:9, totalCount:13, totalLength:0
+recalculate message length finish,message length:22
+use count:4
+write index:8
+[INFO]Received stream data, count:7, totalCount:20, totalLength:22
+write index:13
+[INFO]Received stream data, count:2, totalCount:22, totalLength:22
+write index:20
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find query key request
+in handle message,after deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+payload data type:3
+QueryKeyRequest.value:query_key_test
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header success,message type:3
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:9, totalCount:13, totalLength:0
+recalculate message length finish,message length:22
+use count:4
+write index:8
+[INFO]Received stream data, count:7, totalCount:20, totalLength:22
+write index:13
+[INFO]Received stream data, count:2, totalCount:22, totalLength:22
+write index:20
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find query key request
+in handle message,after deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+payload data type:3
+QueryKeyRequest.value:query_key_test
+bind handler for dataType:4
+bind handler for dataType:3
+113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+expected len:22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header not finish
+find small piece,construct header not finish
+find small piece,construct header success,message type:3
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:5, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:6, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:7, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:8, totalLength:0
+recalculate message length finish,message length:22
+use count:1
+write index:8
+[INFO]Received stream data, count:1, totalCount:9, totalLength:22
+write index:8
+[INFO]Received stream data, count:1, totalCount:10, totalLength:22
+write index:9
+[INFO]Received stream data, count:1, totalCount:11, totalLength:22
+write index:10
+[INFO]Received stream data, count:1, totalCount:12, totalLength:22
+write index:11
+[INFO]Received stream data, count:1, totalCount:13, totalLength:22
+write index:12
+[INFO]Received stream data, count:1, totalCount:14, totalLength:22
+write index:13
+[INFO]Received stream data, count:1, totalCount:15, totalLength:22
+write index:14
+[INFO]Received stream data, count:1, totalCount:16, totalLength:22
+write index:15
+[INFO]Received stream data, count:1, totalCount:17, totalLength:22
+write index:16
+[INFO]Received stream data, count:1, totalCount:18, totalLength:22
+write index:17
+[INFO]Received stream data, count:1, totalCount:19, totalLength:22
+write index:18
+[INFO]Received stream data, count:1, totalCount:20, totalLength:22
+write index:19
+[INFO]Received stream data, count:1, totalCount:21, totalLength:22
+write index:20
+[INFO]Received stream data, count:1, totalCount:22, totalLength:22
+write index:21
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+find query key request
+in handle message,after deserialize,message length=22
+3 0 0 0 14 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 
+payload data type:3
+QueryKeyRequest.value:query_key_test
+113 117 101 114 121 95 107 101 121 95 116 101 115 116 95 102 105 110 105 115 104 44 116 104 105 115 32 105 115 32 118 97 108 117 101 
+expected len:43
+4 0 0 0 35 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 95 102 105 110 105 115 104 44 116 104 105 115 32 105 115 32 118 97 108 117 101 
+find small piece,size less than PacketHeader,copy 1 bytes
+find small piece,construct header not finish
+find small piece,construct header not finish
+find small piece,construct header success,message type:4
+[INFO]Received stream data, count:0, totalCount:4, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:5, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:6, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:7, totalLength:0
+cannot recalculate message length
+[INFO]Received stream data, count:1, totalCount:8, totalLength:0
+recalculate message length finish,message length:43
+use count:1
+write index:8
+[INFO]Received stream data, count:1, totalCount:9, totalLength:43
+write index:8
+[INFO]Received stream data, count:1, totalCount:10, totalLength:43
+write index:9
+[INFO]Received stream data, count:1, totalCount:11, totalLength:43
+write index:10
+[INFO]Received stream data, count:1, totalCount:12, totalLength:43
+write index:11
+[INFO]Received stream data, count:1, totalCount:13, totalLength:43
+write index:12
+[INFO]Received stream data, count:1, totalCount:14, totalLength:43
+write index:13
+[INFO]Received stream data, count:1, totalCount:15, totalLength:43
+write index:14
+[INFO]Received stream data, count:1, totalCount:16, totalLength:43
+write index:15
+[INFO]Received stream data, count:1, totalCount:17, totalLength:43
+write index:16
+[INFO]Received stream data, count:1, totalCount:18, totalLength:43
+write index:17
+[INFO]Received stream data, count:1, totalCount:19, totalLength:43
+write index:18
+[INFO]Received stream data, count:1, totalCount:20, totalLength:43
+write index:19
+[INFO]Received stream data, count:1, totalCount:21, totalLength:43
+write index:20
+[INFO]Received stream data, count:1, totalCount:22, totalLength:43
+write index:21
+[INFO]Received stream data, count:1, totalCount:23, totalLength:43
+write index:22
+[INFO]Received stream data, count:1, totalCount:24, totalLength:43
+write index:23
+[INFO]Received stream data, count:1, totalCount:25, totalLength:43
+write index:24
+[INFO]Received stream data, count:1, totalCount:26, totalLength:43
+write index:25
+[INFO]Received stream data, count:1, totalCount:27, totalLength:43
+write index:26
+[INFO]Received stream data, count:1, totalCount:28, totalLength:43
+write index:27
+[INFO]Received stream data, count:1, totalCount:29, totalLength:43
+write index:28
+[INFO]Received stream data, count:1, totalCount:30, totalLength:43
+write index:29
+[INFO]Received stream data, count:1, totalCount:31, totalLength:43
+write index:30
+[INFO]Received stream data, count:1, totalCount:32, totalLength:43
+write index:31
+[INFO]Received stream data, count:1, totalCount:33, totalLength:43
+write index:32
+[INFO]Received stream data, count:1, totalCount:34, totalLength:43
+write index:33
+[INFO]Received stream data, count:1, totalCount:35, totalLength:43
+write index:34
+[INFO]Received stream data, count:1, totalCount:36, totalLength:43
+write index:35
+[INFO]Received stream data, count:1, totalCount:37, totalLength:43
+write index:36
+[INFO]Received stream data, count:1, totalCount:38, totalLength:43
+write index:37
+[INFO]Received stream data, count:1, totalCount:39, totalLength:43
+write index:38
+[INFO]Received stream data, count:1, totalCount:40, totalLength:43
+write index:39
+[INFO]Received stream data, count:1, totalCount:41, totalLength:43
+write index:40
+[INFO]Received stream data, count:1, totalCount:42, totalLength:43
+write index:41
+[INFO]Received stream data, count:1, totalCount:43, totalLength:43
+write index:42
+[SUCCESS]Receive stream data completed
+in handle message,before deserialize,message length=43
+4 0 0 0 35 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 95 102 105 110 105 115 104 44 116 104 105 115 32 105 115 32 118 97 108 117 101 
+4 0 0 0 35 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 95 102 105 110 105 115 104 44 116 104 105 115 32 105 115 32 118 97 108 117 101 
+find query key result
+in handle message,after deserialize,message length=43
+4 0 0 0 35 0 0 0 113 117 101 114 121 95 107 101 121 95 116 101 115 116 95 102 105 110 105 115 104 44 116 104 105 115 32 105 115 32 118 97 108 117 101 
+payload data type:4
+QueryKeyResult.value:query_key_test_finish,this is value
