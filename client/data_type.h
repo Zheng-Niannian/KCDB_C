@@ -4,20 +4,25 @@
 #define SOCKET_BUFFER_SIZE (1024)
 #define SOCKET_DATA_HANDLER_SIZE (20)
 
-typedef unsigned int uint32;
 
-enum TransferPacketType{
-    NOT_WAIT,LOGIN_REQUEST,LOGIN_RESULT,QUERY_KEY_REQUEST,QUERY_KEY_RESULT
+#include <bits/stdint-intn.h>
+#include<stdio.h>
+
+enum CommandType{
+    NOT_WAIT,LOGIN_REQUEST,LOGIN_RESULT,FIND_REQUEST,FIND_RESULT,SET_REQUEST,SET_RESULT,UPDATE_REQUEST,UPDATE_RESULT,
+    FIND_LESS_REQUEST,FIND_LESS_RESULT,FIND_MORE_REQUEST,FIND_MORE_RESULT,DELETE_REQUEST,DELETE_RESULT,HELP_COMMAND,
+    EXIT_COMMAND
 };
 
 typedef struct {
-    uint32 dataType;
+    int32_t dataType;
 }PacketHeader;
 
 typedef struct{
     void *src;
-    uint32 actualLen;
-    uint32 dataType;
+    int32_t actualLen;
+    int32_t dataType;
+    FILE *fp;
 }PacketPayload;
 
 typedef struct{
@@ -27,18 +32,16 @@ typedef struct{
 
 typedef struct{
     int loginResult;
-    uint32 clientId;
+    int32_t clientId;
 }LoginResult;
 
 typedef struct{
-    uint32 keyLength;
-    char *key;
-}QueryKeyRequest;
-
-typedef struct{
-    uint32 valueLength;
-    char *value;
-}QueryKeyResult;
+    int totalLength;//sizeof(KeyLength)+sizeof(valueLength)+KeyContent+ValueContent
+    int keyLength;
+    int valueLength;
+    //key content
+    //value content;
+}TransferCommand;
 
 
 
