@@ -1,4 +1,5 @@
-#include "event_handler.h"
+
+#include "event_hander.h"
 
 SocketHandlerList list;
 
@@ -28,10 +29,6 @@ void handleMessage(ClientTransferState *state,PacketPayload *payload){
         return;
     }
     printf("payload data type:%u\n",payload->dataType);
-    if(payload->dataType<0||payload->dataType>QUERY_KEY_RESULT){
-        fprintf(stdout,"unsupported data type\n");
-        return;
-    }
     list.handleMessage(&list,state,payload);
 }
 
