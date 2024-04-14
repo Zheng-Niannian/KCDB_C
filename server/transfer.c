@@ -225,7 +225,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
             printf("header.dataType:%d\n",header->dataType);
             for(int i=1;i<SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE;i++){
                 if(header->dataType==serverHandleMessageTypeList[i]){
-                    if(count-sizeof(PacketHeader)>=4){//you totalLength zi duan
+                    if(count-sizeof(PacketHeader)>=4){
                         fprintf(stdout,"resolve find request\n");
                         PacketHeader *start=(PacketHeader*)(data+sizeof(PacketHeader));
                         int32_t totalLength=start->dataType;
@@ -247,7 +247,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                             state->receivedLength=count;
 
                             if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
-                                sprintf(state->filename_buffer,"/home/orange/tmpfile_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                                sprintf(state->filename_buffer,"/home/zheng/KVF/server/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
                                 fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
                                 state->fp=fopen(state->filename_buffer,"w+");
 
