@@ -19,7 +19,9 @@ typedef struct socket_handler_list {
 } SocketHandlerList;
 
 void initEventHandler(void);
+
 void setDataHandler(int dataType, void (*callback)(ClientTransferState *state,PacketPayload *payload));
+
 void handleMessage(ClientTransferState *state,PacketPayload *payload);
 
 #endif //KVFILESERVER_EVENT_HANDER_H
