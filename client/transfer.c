@@ -17,20 +17,38 @@ void afterHandleMessage(ClientTransferState *state){
         free(state->buffer);
         state->buffer=NULL;
     }
+    if(state->fp){
+        fclose(state->fp);
+        state->fp=NULL;
+    }
 }
 
 extern void handleMessage(ClientTransferState *state,PacketPayload *payload);
+extern void *user_interaction_thread(void *arg);
 
-const enum TransferPacketType immutableList[]={
+const enum CommandType immutableList[]={
         NOT_WAIT,LOGIN_REQUEST,LOGIN_RESULT
 };
-#define IMMUTABLE_LIST_SIZE     (3)
 const int immutableTransferTypeLength[]={
         0,sizeof(LoginRequest),sizeof(LoginResult)
 };
+#define IMMUTABLE_LIST_SIZE     (3)
 
-void handle_message(char* data, int socket, uint32 count,ClientTransferState* state) {
-    //printf("data[0]:%d\n",data[0]);
+
+
+const enum CommandType serverHandleMessageTypeList[]={
+        LOGIN_REQUEST,FIND_REQUEST,SET_REQUEST,UPDATE_REQUEST,FIND_LESS_REQUEST,FIND_MORE_REQUEST,DELETE_REQUEST
+};
+#define SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE    (7)
+
+const enum CommandType serverReturnMessageTypeList[]={
+        LOGIN_RESULT,FIND_RESULT,SET_RESULT,UPDATE_RESULT,FIND_LESS_RESULT,FIND_MORE_RESULT,DELETE_RESULT
+};
+#define SERVER_RETURN_MESSAGE_TYPE_LIST_SIZE     (7)
+
+
+void handle_message(char* data, int socket, int32_t count,ClientTransferState* state) {
+
     char* handleDataAwait = NULL;
     int handleDataAwaitCount = 0;
 
@@ -83,13 +101,28 @@ void handle_message(char* data, int socket, uint32 count,ClientTransferState* st
             if(state->receivedLength>=sizeof(PacketHeader)*2){
                 memcpy(state->buffer+previousStateReceivedCount,data,sizeof(PacketHeader)*2-previousStateReceivedCount);
                 PacketHeader *payloadStart=(PacketHeader*)(state->buffer+sizeof(PacketHeader));
-                state->messageLength=sizeof(PacketHeader)+payloadStart->dataType+sizeof(PacketHeader);
+                state->messageLength=sizeof(PacketHeader)*2+payloadStart->dataType;
                 fprintf(stdout,"recalculate message length finish,message length:%u\n",state->messageLength);
                 state->unknownMessageLength=0;
                 char*previousBuffer=state->buffer;
-                state->buffer=malloc(state->messageLength);
-                memset(state->buffer,0,state->messageLength);
-                memcpy(state->buffer,previousBuffer,sizeof(PacketHeader)*2);
+
+                if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
+                    sprintf(state->filename_buffer,"/home/orange/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                    fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
+                    state->fp=fopen(state->filename_buffer,"w+");
+                    if(!state->fp){
+                        fprintf(stdout,"cannot create file buffer for client%d,abort connection\n",state->clientId);
+                        state->connect=0;
+                        return;
+                    }
+                    fwrite(state->buffer,1,sizeof(PacketHeader)*2,state->fp);
+                    state->buffer=NULL;
+                }else{
+                    state->buffer=malloc(state->messageLength);
+                    memset(state->buffer,0,state->messageLength);
+                    memcpy(state->buffer,previousBuffer,sizeof(PacketHeader)*2);
+                }
+
                 free(previousBuffer);
 
                 int useCount=sizeof(PacketHeader)*2-previousStateReceivedCount;
@@ -107,12 +140,14 @@ void handle_message(char* data, int socket, uint32 count,ClientTransferState* st
 
         if (state->receivedLength > state->messageLength) {
             int allowance = state->messageLength - (state->receivedLength - count);
-            //TODO: Big file transfer,cannot use memory buffer directly,should use tmp file,need implement resource manager
-            memcpy(state->buffer + state->receivedLength - count, data, allowance);
-            uint32 remain_data = state->receivedLength - state->messageLength;
+            if(state->buffer){
+                memcpy(state->buffer + state->receivedLength - count, data, allowance);
+            }else{
+                fwrite(data,1,allowance,state->fp);
+            }
+
+            int32_t remain_data = state->receivedLength - state->messageLength;
             state->receivedLength = state->messageLength;
-
-
             printf("current packet receive finish, remain data count:%d\n", remain_data);
             int nextPackageDataIndex = count - remain_data;
             handleDataAwait = (char *) malloc(sizeof(char) * remain_data);
@@ -121,27 +156,23 @@ void handle_message(char* data, int socket, uint32 count,ClientTransferState* st
         } else {
             int writeIndex=state->receivedLength - count;
             printf("write index:%d\n",writeIndex);
-            memcpy(state->buffer + state->receivedLength - count, data, count);
+
+            if(state->buffer){
+                memcpy(state->buffer + state->receivedLength - count, data, count);
+            }else{
+                fwrite(data,1,count,state->fp);
+            }
         }
         if (state->receivedLength == state->messageLength) {
             printf("[SUCCESS]Receive stream data completed\n");
-//            lastActionType = state->messageType;
             printf("in handle message,before deserialize,message length=%d\n",state->messageLength);
-            for(int i=0;i<state->messageLength;i++){
-                printf("%u ",state->buffer[i]);
-            }
-            printf("\n");
+
             PacketPayload payload=deserializeActualData(state,state->buffer,state->messageLength);
             state->messageType = NOT_WAIT;
             printf("in handle message,after deserialize,message length=%d\n",state->messageLength);
-            for(int i=0;i<state->messageLength;i++){
-                printf("%u ",state->buffer[i]);
-            }
-            printf("\n");
-            handleMessage(state,&payload);
 
+            handleMessage(state,&payload);
             afterHandleMessage(state);
-            free(state->buffer);
         }
     }
     else{
@@ -172,35 +203,7 @@ void handle_message(char* data, int socket, uint32 count,ClientTransferState* st
             }
         }
         if(!process){
-            if(header->dataType==QUERY_KEY_RESULT){
-                if(count-sizeof(PacketHeader)>=4){
-                    PacketHeader *payloadStart=(PacketHeader*)(data+sizeof(PacketHeader));
-                    uint32 valueLength=payloadStart->dataType;
-                    if((valueLength+sizeof(PacketHeader)*2)<count){
-                        PacketPayload payload= deserializeActualData(state,data,count);
-                        handleMessage(state,&payload);
-                        afterHandleMessage(state);
-                        int allowance=count-valueLength-sizeof(PacketHeader)*2;
-                        if(allowance>0){
-                            handleDataAwait=(char*)malloc(sizeof(char)*allowance);
-                            memcpy(handleDataAwait,data+sizeof(PacketHeader)*2+valueLength,allowance);
-                            handleDataAwaitCount=allowance;
-                        }
-                    }else{
-                        state->messageType=header->dataType;
-                        state->messageLength=sizeof(PacketHeader)*2+valueLength;
-                        state->receivedLength=count;
-                        state->buffer=malloc(state->messageLength);
-                        memcpy(state->buffer,data,state->receivedLength);
-                    }
-                }else{
-                    state->messageType=header->dataType;
-                    state->unknownMessageLength=1;
-                    state->buffer=malloc(sizeof(PacketHeader)*2);
-                    memset(state->buffer,0,sizeof(PacketHeader)*2);
-                    memcpy(state->buffer,data,count);
-                }
-            }
+
         }
     }
     
@@ -210,27 +213,7 @@ void handle_message(char* data, int socket, uint32 count,ClientTransferState* st
     }
 }
 
-void *sendMsg(void *arg) {
-    char message[SOCKET_BUFFER_SIZE];
-    while(clientTransferState.connect) {
-        fprintf(stdout,"input querykey:");
-        fgets(message, 1024, stdin);
-        if(message[0]=='\n'){
-            continue;
-        }
-        int length=strlen(message);
-        QueryKeyRequest request={
-                length,message
-        };
-        void* serializeData=serializeTransferData(&request,length,QUERY_KEY_REQUEST);
-        if(sendSerializeData(&clientTransferState,serializeData,sizeof(request.keyLength)+length)<0){
-            fprintf(stdout,"transfer error occurred\n");
-        }
-        free(serializeData);
-    }
-    fprintf(stdout,"sendMsg thread exit normally\n");
-    return NULL;
-}
+
 
 void *receiveMsg(void *arg) {
     char buffer[SOCKET_BUFFER_SIZE]={0};
@@ -305,9 +288,10 @@ void initClient(void){
     clientTransferState.connect=1;
 
     pthread_t receiveThreadId;
-    pthread_create(&clientTransferState.threadId, NULL, sendMsg, NULL);
+    pthread_create(&clientTransferState.threadId, NULL, user_interaction_thread, NULL);
     pthread_create(&receiveThreadId, NULL, receiveMsg, NULL);
 
+    //Основной поток зависает и ждет выполнения других потоков
     pthread_join(clientTransferState.threadId, NULL);
     pthread_join(receiveThreadId, NULL);
 
@@ -316,8 +300,14 @@ void initClient(void){
 
 
 
-void *serializeTransferData(void* src, uint32 len, enum TransferPacketType type){
-
+void *serializeTransferData(void* src, int32_t len, enum CommandType type){
+    int find=0;
+    for(int i=0;i<SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE;i++){
+        if(type==serverHandleMessageTypeList[i]){
+            find=1;
+            break;
+        }
+    }
     for(int i=0;i<IMMUTABLE_LIST_SIZE;i++){
         if(type==immutableList[i]){
             char *buffer=(char*)malloc(sizeof(char)*len+sizeof(PacketHeader));
@@ -332,51 +322,97 @@ void *serializeTransferData(void* src, uint32 len, enum TransferPacketType type)
             return buffer;
         }
     }
-    if(type==QUERY_KEY_REQUEST){
-        QueryKeyRequest*request=(QueryKeyRequest*)src;
-        int length=sizeof(PacketHeader)+sizeof(request->keyLength)+request->keyLength;
-        char*buffer=(char*) malloc(sizeof(char)*length);
-        if(!buffer){
-            return NULL;
+#define COMMAND_REQUEST_LIST_SIZE   (6)
+    const int command_request_list[]={FIND_REQUEST,SET_REQUEST,UPDATE_REQUEST,FIND_LESS_REQUEST,FIND_MORE_REQUEST,DELETE_REQUEST};
+    for(int i=0;i<COMMAND_REQUEST_LIST_SIZE;i++){
+        if(type==command_request_list[i]){
+            ConsoleCommand *consoleCommand=(ConsoleCommand*)src;
+            TransferCommand transferCommand;
+            memset((void*)&transferCommand,0,sizeof(TransferCommand));
+            if(consoleCommand->key_file){
+                long size=getFileSize(consoleCommand->key);
+                if(size<=0){
+                    fprintf(stdout,"invalid key length:%ld\n",size);
+                    return NULL;
+                }
+                transferCommand.keyLength=size;
+            }else{
+                if(consoleCommand->key!=NULL){
+                    transferCommand.keyLength=strlen(consoleCommand->key);
+                }
+            }
+            if(consoleCommand->value_file){
+                long size=getFileSize(consoleCommand->value);
+                if(size<=0){
+                    fprintf(stdout,"invalid key length:%ld\n",size);
+                    return NULL;
+                }
+                transferCommand.valueLength=size;
+            }else{
+                if(consoleCommand->value!=NULL){
+                    transferCommand.valueLength=strlen(consoleCommand->value);
+                }
+            }
+            transferCommand.totalLength=transferCommand.keyLength+transferCommand.valueLength;
+            printf("transfer command:%d %d %d\n",transferCommand.totalLength,transferCommand.keyLength,transferCommand.valueLength);
+            char *buffer=(char*)malloc(sizeof(transferCommand.totalLength)*3+sizeof(PacketHeader));
+            PacketHeader header={
+                    .dataType=type
+            };
+            memcpy(buffer,&header,sizeof(PacketHeader));
+            memcpy(buffer+sizeof(PacketHeader),&transferCommand,sizeof(transferCommand.totalLength));
+            memcpy(buffer+sizeof(PacketHeader)+sizeof(transferCommand.totalLength),&transferCommand.keyLength,sizeof(transferCommand.totalLength));
+            memcpy(buffer+sizeof(PacketHeader)+sizeof(transferCommand.totalLength)*2,&transferCommand.valueLength,sizeof(transferCommand.totalLength));
+            return buffer;
         }
-        PacketHeader header={
-                .dataType=type
-        };
-        memcpy(buffer,&header,sizeof(PacketHeader));
-        memcpy(buffer+sizeof(PacketHeader),&request->keyLength,sizeof(request->keyLength));
-        memcpy(buffer+sizeof(PacketHeader)+sizeof(request->keyLength),request->key,request->keyLength);
-        return buffer;
     }
-    if(type==QUERY_KEY_RESULT){
-        QueryKeyResult *result=(QueryKeyRequest*)src;
-        int length= sizeof(PacketHeader) + sizeof(result->valueLength) + result->valueLength;
-        char*buffer=(char*) malloc(sizeof(char)*length);
-        if(!buffer){
-            return NULL;
-        }
-        PacketHeader header={
-                .dataType=type
-        };
-        memcpy(buffer,&header,sizeof(PacketHeader));
-        memcpy(buffer+sizeof(PacketHeader), &result->valueLength, sizeof(result->valueLength));
-        memcpy(buffer+sizeof(PacketHeader)+sizeof(result->valueLength), result->value, result->valueLength);
-        return buffer;
-    }
+
     return NULL;
 }
 
-int sendSerializeData(ClientTransferState*state,void *serializeData,uint32 beforeSerializeLength){
+int sendSerializeData(ClientTransferState*state,void *serializeData,int32_t beforeSerializeLength){
+    return sendRawData(state,serializeData,beforeSerializeLength+sizeof(PacketHeader));
+}
+//Отправить данные файла на сервер
+int sendFileData(ClientTransferState*state,const char* filename){
+    FILE* fp = fopen(filename, "rb");
+//    fseek(fp, 0, SEEK_END);
+//    long size = ftell(fp);
+//    fclose(fp);
+
+//    fp= fopen(filename, "rb");
+    char buffer[SOCKET_BUFFER_SIZE];
+    size_t bytesRead;
+    size_t totalBytesSent = 0;
+    size_t sendResult;
+
+    while ((bytesRead = fread(buffer, 1, SOCKET_BUFFER_SIZE, fp)) > 0) {
+        sendResult = send(state->socket,buffer, bytesRead,0);
+        totalBytesSent += sendResult;
+        if(sendResult<bytesRead){
+            fprintf(stdout,"Not all data sent. Sent %zu out of %zu bytes.",sendResult,bytesRead);
+            state->connect=0;
+            fprintf(stdout,"invalid data transfer,abort connection.");
+            return -1;
+        }
+    }
+    printf("send file bytes:%zu\n",totalBytesSent);
+
+    return totalBytesSent;
+}
+//Отправить необработанные данные на сервер
+int sendRawData(ClientTransferState*state,const char*buffer,int32_t len){
     size_t bytesRead=0;
     size_t totalBytesSent = 0;
     size_t sendResult;
 
     size_t currentIndex=0;
-    bytesRead=(beforeSerializeLength+sizeof(PacketHeader))>SOCKET_BUFFER_SIZE
-            ?SOCKET_BUFFER_SIZE:beforeSerializeLength+sizeof(PacketHeader);
+    bytesRead=(len)>SOCKET_BUFFER_SIZE
+              ?SOCKET_BUFFER_SIZE:len;
 
 
     while(bytesRead!=0){
-        sendResult=send(state->socket,serializeData+currentIndex,bytesRead,0);
+        sendResult=send(state->socket,buffer+currentIndex,bytesRead,0);
         totalBytesSent+=sendResult;
         if(sendResult<bytesRead){
             fprintf(stdout,"Not all data sent. Sent %zu out of %zu bytes.",sendResult,bytesRead);
@@ -385,18 +421,15 @@ int sendSerializeData(ClientTransferState*state,void *serializeData,uint32 befor
             return -1;
         }
         currentIndex+=sendResult;
-        bytesRead=(currentIndex+SOCKET_BUFFER_SIZE)<(beforeSerializeLength+sizeof(PacketHeader))
-                ?SOCKET_BUFFER_SIZE:(beforeSerializeLength+sizeof(PacketHeader)-currentIndex);
+        bytesRead=(currentIndex+SOCKET_BUFFER_SIZE)<(len)
+                  ?SOCKET_BUFFER_SIZE:(len-currentIndex);
     }
     printf("send bytes count:%zu\n",totalBytesSent);
 
     return totalBytesSent;
 }
 
-PacketPayload deserializeActualData(ClientTransferState*state,void* header, uint32 len){
-    if(state->messageType==NOT_WAIT){//no need for packet reconstruct
-
-    }
+PacketPayload deserializeActualData(ClientTransferState*state,void* header, int32_t len){
     char *str=header;
     for(int i=0;i<len;i++){
         printf("%d ",str[i]);
@@ -407,7 +440,14 @@ PacketPayload deserializeActualData(ClientTransferState*state,void* header, uint
     PacketPayload ret={
             NULL,0,-1
     };
-    if(packetHeader.dataType<NOT_WAIT||packetHeader.dataType>QUERY_KEY_RESULT){
+    int find=0;
+    for(int i=0;i<SERVER_RETURN_MESSAGE_TYPE_LIST_SIZE;i++){
+        if(packetHeader.dataType==serverReturnMessageTypeList[i]){
+            find=1;
+            break;
+        }
+    }
+    if(!find){
         printf("invalid data type,abort resolve");
         return ret;
     }
@@ -416,39 +456,8 @@ PacketPayload deserializeActualData(ClientTransferState*state,void* header, uint
             ret.dataType=packetHeader.dataType;
             ret.actualLen=len-sizeof(PacketHeader);
             ret.src=(header+sizeof(PacketHeader));
-//
-//                if(len-sizeof(PacketHeader) >= immutableTransferTypeLength[i]){
-//                    ret.dataType=packetHeader.dataType;
-//                    ret.actualLen=len-sizeof(PacketHeader);
-//                    ret.src=(header+sizeof(PacketHeader));
-//                }else{
-//                    state->messageType=packetHeader.dataType;
-//                    //payload length
-//                    state->messageLength=immutableTransferTypeLength[i];
-//                    state->receivedLength=immutableTransferTypeLength[i]-(len-sizeof(PacketHeader));
-//                    state->buffer=(char*)malloc(sizeof(state->messageLength));
-//                    memcpy(state->buffer,header+sizeof(PacketHeader),state->receivedLength);
-//                }
             return ret;
         }
-    }
-    if(packetHeader.dataType==QUERY_KEY_RESULT){
-        fprintf(stdout,"find query key result\n");
-        ret.dataType=packetHeader.dataType;
-        QueryKeyResult *result=(QueryKeyResult*)(header+sizeof(PacketHeader));
-
-        ret.actualLen=result->valueLength+sizeof(result->valueLength);
-        ret.src=header + sizeof(PacketHeader);
-        return ret;
-    }
-    if(packetHeader.dataType==QUERY_KEY_REQUEST){
-        fprintf(stdout,"find query key request\n");
-        ret.dataType=packetHeader.dataType;
-        QueryKeyRequest *request=(QueryKeyRequest *)(header + sizeof(PacketHeader));
-
-        ret.actualLen= request->keyLength + sizeof(request->keyLength);
-        ret.src=header + sizeof(PacketHeader);
-        return ret;
     }
     return ret;
 
