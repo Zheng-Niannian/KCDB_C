@@ -8,6 +8,7 @@ void $__handleMessage(struct socket_handler_list *it,ClientTransferState *state,
 void initEventHandler(void){
     $__initHandlerList(&list);
 }
+
 void setDataHandler(int dataType, void (*callback)(ClientTransferState *state,PacketPayload *payload)) {
     if(list.handlers[dataType].exist){
         printf("target data type has already bind a handler\n");
@@ -27,10 +28,6 @@ void handleMessage(ClientTransferState *state,PacketPayload *payload){
         return;
     }
     printf("payload data type:%u\n",payload->dataType);
-    if(payload->dataType<0||payload->dataType>QUERY_KEY_RESULT){
-        fprintf(stdout,"unsupported data type\n");
-        return;
-    }
     list.handleMessage(&list,state,payload);
 }
 
