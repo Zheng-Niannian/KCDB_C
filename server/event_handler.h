@@ -25,3 +25,4 @@ void setDataHandler(int dataType, void (*callback)(ClientTransferState *state,Pa
 void handleMessage(ClientTransferState *state,PacketPayload *payload);
 
 #endif //KVFILESERVER_EVENT_HANDER_H
+
