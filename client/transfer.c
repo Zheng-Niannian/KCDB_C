@@ -80,6 +80,13 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                 data+=useCount;
                 count-=useCount;
                 state->unknownMessageLength=1;
+
+                for(int i=0;i<IMMUTABLE_LIST_SIZE;i++){
+                    if(state->messageType==immutableList[i]){
+                        state->unknownMessageLength=0;
+                        state->messageLength=immutableList[i];
+                    }
+                }
             }else{
                 fprintf(stdout,"find small piece,construct header not finish\n");
                 memcpy(state->buffer+state->receivedLength,data,count);
@@ -291,7 +298,6 @@ void initClient(void){
     pthread_create(&clientTransferState.threadId, NULL, user_interaction_thread, NULL);
     pthread_create(&receiveThreadId, NULL, receiveMsg, NULL);
 
-    //Основной поток зависает и ждет выполнения других потоков
     pthread_join(clientTransferState.threadId, NULL);
     pthread_join(receiveThreadId, NULL);
 
@@ -373,7 +379,7 @@ void *serializeTransferData(void* src, int32_t len, enum CommandType type){
 int sendSerializeData(ClientTransferState*state,void *serializeData,int32_t beforeSerializeLength){
     return sendRawData(state,serializeData,beforeSerializeLength+sizeof(PacketHeader));
 }
-//Отправить данные файла на сервер
+
 int sendFileData(ClientTransferState*state,const char* filename){
     FILE* fp = fopen(filename, "rb");
 //    fseek(fp, 0, SEEK_END);
@@ -400,7 +406,7 @@ int sendFileData(ClientTransferState*state,const char* filename){
 
     return totalBytesSent;
 }
-//Отправить необработанные данные на сервер
+
 int sendRawData(ClientTransferState*state,const char*buffer,int32_t len){
     size_t bytesRead=0;
     size_t totalBytesSent = 0;
