@@ -1,11 +1,13 @@
 #ifndef KVFILECLIENT_REQUEST_PROCESSOR_H
 #define KVFILECLIENT_REQUEST_PROCESSOR_H
 
+#include"logger.h"
 #include"transfer.h"
 #include"event_handler.h"
 #include<stdlib.h>
 #include<string.h>
 #include<stdio.h>
+#include"art_concurrent.h"
 
 void initRequestProcessor(void);
 
