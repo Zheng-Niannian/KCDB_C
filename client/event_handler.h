@@ -7,6 +7,7 @@
 #include<string.h>
 #include"transfer.h"
 
+
 typedef struct {
     int exist;
     void (*callback)(ClientTransferState *state,PacketPayload *payload);
