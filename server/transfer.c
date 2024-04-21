@@ -1,3 +1,4 @@
+
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +32,6 @@ extern void handleMessage(ClientTransferState *state,PacketPayload *payload);
 const enum CommandType immutableList[]={
         NOT_WAIT,LOGIN_REQUEST,LOGIN_RESULT
 };
-//4 type content
 const int immutableTransferTypeLength[]={
         0,sizeof(LoginRequest),sizeof(LoginResult)
 };
@@ -85,14 +85,6 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                 data+=useCount;
                 count-=useCount;
                 state->unknownMessageLength=1;
-
-//                for(int i=0;i<IMMUTABLE_LIST_SIZE;i++){
-//                    if(state->messageType==immutableList[i]){
-//                        state->unknownMessageLength=0;
-//                        state->messageLength=immutableList[i];
-//                    }
-//                }
-
             }else{
                 fprintf(stdout,"find small piece,construct header not finish\n");
                 memcpy(state->buffer+state->receivedLength,data,count);
@@ -120,7 +112,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                 char*previousBuffer=state->buffer;
 
                 if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
-                    sprintf(state->filename_buffer,"/home/orange/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                    sprintf(state->filename_buffer,"/home/zheng1/KVF/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
                     fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
                     state->fp=fopen(state->filename_buffer,"w+");
                     if(!state->fp){
@@ -205,7 +197,6 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
         int process=0;
         for(int i=0;i<IMMUTABLE_LIST_SIZE;i++){
             if(header->dataType==immutableList[i]){
-                //20 4=24  24
                 int needPayloadBytesCount=immutableTransferTypeLength[i]-(count-sizeof(PacketHeader));
                 if(needPayloadBytesCount<=0){
                     PacketPayload payload=deserializeActualData(state,data,count);
@@ -233,11 +224,11 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
             for(int i=1;i<SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE;i++){
                 if(header->dataType==serverHandleMessageTypeList[i]){
                     if(count-sizeof(PacketHeader)>=4){//you totalLength zi duan
-//                        fprintf(stdout,"resolve find request\n");
+                        fprintf(stdout,"resolve find request\n");
                         PacketHeader *start=(PacketHeader*)(data+sizeof(PacketHeader));
                         int32_t totalLength=start->dataType;
                         fprintf(stdout,"total length:%d\n",totalLength);
-                        if((totalLength+sizeof(PacketHeader)*4)<=count){
+                        if((totalLength+sizeof(PacketHeader)*4)<count){
                             PacketPayload payload= deserializeActualData(state,data,count);
                             handleMessage(state,&payload);
                             afterHandleMessage(state);
@@ -254,7 +245,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                             state->receivedLength=count;
 
                             if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
-                                sprintf(state->filename_buffer,"/home/orange/tmpfile_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                                sprintf(state->filename_buffer,"/home/zheng1/KVF/tmpfile_buffer_%d_%d.bin",state->clientId,state->messageId++);
                                 fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
                                 state->fp=fopen(state->filename_buffer,"w+");
 
@@ -264,7 +255,6 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                                     return;
                                 }
                                 fwrite(data,1,state->receivedLength,state->fp);
-                                //TODO free
                                 state->buffer=NULL;
                             }else{
                                 state->buffer=malloc(state->messageLength);
