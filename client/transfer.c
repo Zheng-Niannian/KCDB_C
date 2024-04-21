@@ -114,7 +114,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                 char*previousBuffer=state->buffer;
 
                 if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
-                    sprintf(state->filename_buffer,"/home/orange/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                    sprintf(state->filename_buffer,"/home/zheng1/KVF/tmpfile_buffer_%d_%d.bin",state->clientId,state->messageId++);
                     fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
                     state->fp=fopen(state->filename_buffer,"w+");
                     if(!state->fp){
@@ -297,7 +297,6 @@ void initClient(void){
     pthread_t receiveThreadId;
     pthread_create(&clientTransferState.threadId, NULL, user_interaction_thread, NULL);
     pthread_create(&receiveThreadId, NULL, receiveMsg, NULL);
-
     pthread_join(clientTransferState.threadId, NULL);
     pthread_join(receiveThreadId, NULL);
 
