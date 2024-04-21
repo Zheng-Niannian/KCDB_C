@@ -1,4 +1,3 @@
-
 #include "event_handler.h"
 
 SocketHandlerList list;
