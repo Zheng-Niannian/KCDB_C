@@ -46,6 +46,11 @@ const enum CommandType serverReturnMessageTypeList[]={
 };
 #define SERVER_RETURN_MESSAGE_TYPE_LIST_SIZE     (7)
 
+const enum CommandType transferCommandReturnTypeList[]={
+        FIND_RESULT,SET_RESULT,UPDATE_RESULT,FIND_LESS_RESULT,FIND_MORE_RESULT,DELETE_RESULT
+};
+#define TRANSFER_COMMAND_RETURN_TYPE_LIST_SIZE  (6)
+
 
 void handle_message(char* data, int socket, int32_t count,ClientTransferState* state) {
 
@@ -114,7 +119,7 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                 char*previousBuffer=state->buffer;
 
                 if(state->messageLength>TRANSFER_MEMORY_BUFFER_MAX_SIZE){
-                    sprintf(state->filename_buffer,"/home/zheng1/KVF/tmpfile_buffer_%d_%d.bin",state->clientId,state->messageId++);
+                    sprintf(state->filename_buffer,"/home/zheng1/KVF/tmp/file_buffer_%d_%d.bin",state->clientId,state->messageId++);
                     fprintf(stdout,"try to create file: %s\n",state->filename_buffer);
                     state->fp=fopen(state->filename_buffer,"w+");
                     if(!state->fp){
@@ -199,7 +204,6 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
                     state->messageLength=immutableTransferTypeLength[i]+sizeof(PacketHeader);
                     state->receivedLength=count;
                     memcpy(state->buffer,data,state->receivedLength);
-                    //wait for reconstruct
                 }
                 int allowance=count-immutableTransferTypeLength[i]-sizeof(PacketHeader);
                 if(allowance>0){
@@ -210,7 +214,59 @@ void handle_message(char* data, int socket, int32_t count,ClientTransferState* s
             }
         }
         if(!process){
+            log_info("header.dataType:%d\n", header->dataType);
+            for (int i = 0; i < TRANSFER_COMMAND_RETURN_TYPE_LIST_SIZE; i++) {
+                if (header->dataType == transferCommandReturnTypeList[i]) {
+                    if (count - sizeof(PacketHeader) >= 4) {
+                        PacketHeader *start = (PacketHeader *) (data + sizeof(PacketHeader));
+                        int32_t totalLength = start->dataType;
+                        log_info("total length:%d\n", totalLength);
+                        if ((totalLength + sizeof(PacketHeader) * 4) <= count) {
+                            PacketPayload payload = deserializeActualData(state, data, count);
+                            handleMessage(state, &payload);
+                            afterHandleMessage(state);
+                            int allowance = count - totalLength - sizeof(PacketHeader) * 4;
+                            if (allowance > 0) {
+                                handleDataAwait = (char *) malloc(sizeof(char) * allowance);
+                                memcpy(handleDataAwait, data + sizeof(PacketHeader) * 4 + totalLength, allowance);
+                                handleDataAwaitCount = allowance;
+                            }
+                        } else {
+                            state->messageType = header->dataType;
+                            state->messageLength = sizeof(PacketHeader) * 4 + totalLength;
+                            state->receivedLength = count;
 
+                            if (state->messageLength > TRANSFER_MEMORY_BUFFER_MAX_SIZE) {
+                                sprintf(state->filename_buffer, "/home/zheng1/client/tmpfile_buffer_%d_%d.bin",
+                                        state->clientId, state->messageId++);
+                                log_info("try to create file: %s\n", state->filename_buffer);
+                                state->fp = fopen(state->filename_buffer, "w+");
+
+                                if (!state->fp) {
+                                    log_error( "cannot create file buffer for client%d,abort connection\n",
+                                            state->clientId);
+                                    state->connect = 0;
+                                    return;
+                                }
+                                fwrite(data, 1, state->receivedLength, state->fp);
+                                free(state->buffer);
+                                state->buffer = NULL;
+                            } else {
+                                state->buffer = malloc(state->messageLength);
+                                memset(state->buffer, 0, state->messageLength);
+                                memcpy(state->buffer, data, state->receivedLength);
+                            }
+                        }
+                    } else {
+                        state->messageType = header->dataType;
+                        state->unknownMessageLength = 1;
+                        state->buffer = malloc(sizeof(PacketHeader) * 2);
+                        memset(state->buffer, 0, sizeof(PacketHeader) * 2);
+                        memcpy(state->buffer, data, count);
+                    }
+
+                }
+            }
         }
     }
     
@@ -297,6 +353,7 @@ void initClient(void){
     pthread_t receiveThreadId;
     pthread_create(&clientTransferState.threadId, NULL, user_interaction_thread, NULL);
     pthread_create(&receiveThreadId, NULL, receiveMsg, NULL);
+
     pthread_join(clientTransferState.threadId, NULL);
     pthread_join(receiveThreadId, NULL);
 
@@ -464,6 +521,18 @@ PacketPayload deserializeActualData(ClientTransferState*state,void* header, int3
             return ret;
         }
     }
+
+    for(int i=0;i<TRANSFER_COMMAND_RETURN_TYPE_LIST_SIZE;i++){
+        if(packetHeader.dataType==transferCommandReturnTypeList[i]){
+            ret.dataType = packetHeader.dataType;
+            ret.src = header + sizeof(PacketHeader);
+            PacketHeader *start = (PacketHeader *) ret.src;
+            ret.actualLen = start->dataType;
+            return ret;
+        }
+    }
+
+
     return ret;
 
 }
