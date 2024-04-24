@@ -30,13 +30,16 @@ static art_node *alloc_node(uint8_t type) {
     pthread_rwlock_init(&node->lock, NULL);
     return node;
 }
+
 int art_tree_init(art_tree *t) {
     t->root = NULL;
     t->size = 0;
     return 0;
 }
+
 static void destroy_node(art_node *n) {
     if (!n) return;
+
     if (IS_ART_LEAF(n)) {
         free(GET_LEAF_RAW_DATA(n));
         return;
@@ -160,6 +163,8 @@ static art_node **find_children(art_node *n, unsigned char c) {
 static inline int min(int a, int b) {
     return (a < b) ? a : b;
 }
+
+
 static int check_prefix(const art_node *n, const unsigned char *key, int key_len, int depth) {
     int max_cmp = min(min(n->part_key_length, MAX_PREFIX_LEN), key_len - depth);
     int index;
@@ -169,11 +174,16 @@ static int check_prefix(const art_node *n, const unsigned char *key, int key_len
     }
     return index;
 }
+
+
 static int leaf_matches(const art_leaf_node *n, const unsigned char *key, int key_len, int depth) {
     (void) depth;
     if (n->key_length != (uint32_t) key_len) return 1;
+
     return memcmp(n->key, key, key_len);
 }
+
+
 void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
     art_node **child;
     art_node *n = t->root;
@@ -196,6 +206,7 @@ void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
 
             depth = depth + n->part_key_length;
         }
+
         pthread_rwlock_unlock(&n->lock);
         child = find_children(n, key[depth]);
         n = (child) ? *child : NULL;
@@ -203,6 +214,7 @@ void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
     }
     return NULL;
 }
+
 
 static art_leaf_node *minimum(const art_node *n) {
     if (!n) return NULL;
@@ -227,6 +239,7 @@ static art_leaf_node *minimum(const art_node *n) {
             abort();
     }
 }
+
 static art_leaf_node *maximum(const art_node *n) {
     if (!n) return NULL;
     if (IS_ART_LEAF(n)) return GET_LEAF_RAW_DATA(n);
@@ -268,11 +281,13 @@ static int longest_common_prefix(art_leaf_node *l1, art_leaf_node *l2, int depth
     }
     return index;
 }
+
 static void copy_node_header(art_node *dest, art_node *src) {
     dest->children_count = src->children_count;
     dest->part_key_length = src->part_key_length;
     memcpy(dest->part_key, src->part_key, min(MAX_PREFIX_LEN, src->part_key_length));
 }
+
 static void add_child256(art_node256 *n, art_node **ref, unsigned char c, void *child) {
     (void) ref;
     n->node.children_count++;
@@ -304,6 +319,7 @@ static void add_child48(art_node48 *n, art_node **ref, unsigned char c, void *ch
         add_child256(new_node, ref, c, child);
     }
 }
+
 static void add_child16(art_node16 *n, art_node **ref, unsigned char c, void *child) {
     if (n->node.children_count < 16) {
         unsigned index = 0;
@@ -344,15 +360,20 @@ static void add_child4(art_node4 *n, art_node **ref, unsigned char c, void *chil
             if (c < n->children_keys[index]) break;
         }
 
+        // Shift to make room
         memmove(n->children_keys + index + 1, n->children_keys + index, n->node.children_count - index);
         memmove(n->children + index + 1, n->children + index,
                 (n->node.children_count - index) * sizeof(void *));
+
+        // Insert element
         n->children_keys[index] = c;
         n->children[index] = (art_node *) child;
         n->node.children_count++;
         pthread_rwlock_unlock(&n->node.lock);
     } else {
         art_node16 *new_node = (art_node16 *) alloc_node(NODE16);
+
+        // Copy the child pointers and the key map
         memcpy(new_node->children, n->children,
                sizeof(void *) * n->node.children_count);
         memcpy(new_node->children_keys, n->children_keys,
@@ -381,6 +402,7 @@ static void add_children(art_node *n, art_node **ref, unsigned char c, void *chi
             abort();
     }
 }
+
 static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_len, int depth) {
     int max_cmp = min(min(MAX_PREFIX_LEN, n->part_key_length), key_len - depth);
     int index;
@@ -388,6 +410,7 @@ static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_
         if (n->part_key[index] != key[depth + index])
             return index;
     }
+
     if (n->part_key_length > MAX_PREFIX_LEN) {
         art_leaf_node *l = minimum(n);
         max_cmp = min(l->key_length, key_len) - depth;
@@ -440,11 +463,13 @@ recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_
             pthread_rwlock_unlock(&n->lock);
             goto RECURSE_SEARCH;
         }
+
         art_node4 *new_node = (art_node4 *) alloc_node(NODE4);
         pthread_rwlock_wrlock(&new_node->node.lock);
         *ref = (art_node *) new_node;
         new_node->node.part_key_length = prefix_diff;
         memcpy(new_node->node.part_key, n->part_key, min(MAX_PREFIX_LEN, prefix_diff));
+
         if (n->part_key_length <= MAX_PREFIX_LEN) {
             add_child4(new_node, ref, n->part_key[prefix_diff], n);
             n->part_key_length -= (prefix_diff + 1);
@@ -457,6 +482,7 @@ recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_
             memcpy(n->part_key, l->key + depth + prefix_diff + 1,
                    min(MAX_PREFIX_LEN, n->part_key_length));
         }
+
         art_leaf_node *l = create_leaf_node(key, key_len, value);
         pthread_rwlock_wrlock(&new_node->node.lock);
         add_child4(new_node, ref, key[depth + prefix_diff], SET_ART_LEAF(l));
@@ -476,12 +502,16 @@ recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_
     add_children(n, ref, key[depth], SET_ART_LEAF(l));
     return NULL;
 }
+
+
 void *art_insert(art_tree *t, const unsigned char *key, int key_len, void *value) {
     int previous_value = 0;
     void *previous_value_ptr = recursive_insert(t->root, &t->root, key, key_len, value, 0, &previous_value, 1);
     if (!previous_value) t->size++;
     return previous_value_ptr;
 }
+
+
 void *art_insert_no_replace(art_tree *t, const unsigned char *key, int key_len, void *value) {
     int previous_value = 0;
     void *previous_value_ptr = recursive_insert(t->root, &t->root, key, key_len, value, 0, &previous_value, 0);
@@ -567,6 +597,7 @@ static void remove_child4(art_node4 *n, art_node **ref, art_node **l) {
     memmove(n->children_keys + pos, n->children_keys + pos + 1, n->node.children_count - 1 - pos);
     memmove(n->children + pos, n->children + pos + 1, (n->node.children_count - 1 - pos) * sizeof(void *));
     n->node.children_count--;
+
     if (n->node.children_count == 1) {
         art_node *child = n->children[0];
 
@@ -581,6 +612,7 @@ static void remove_child4(art_node4 *n, art_node **ref, art_node **l) {
                 memcpy(n->node.part_key + prefix, child->part_key, sub_prefix);
                 prefix += sub_prefix;
             }
+
             memcpy(child->part_key, n->node.part_key, min(prefix, MAX_PREFIX_LEN));
             child->part_key_length += n->node.part_key_length + 1;
         }
@@ -639,6 +671,7 @@ static art_leaf_node *recursive_delete(art_node *n, art_node **ref, const unsign
     if (!child) {
         return NULL;
     }
+
     if (IS_ART_LEAF(*child)) {
         art_leaf_node *l = GET_LEAF_RAW_DATA(*child);
         if (!leaf_matches(l, key, key_len, depth)) {
@@ -649,11 +682,13 @@ static art_leaf_node *recursive_delete(art_node *n, art_node **ref, const unsign
             return l;
         }
         return NULL;
+
     } else {
 //        pthread_rwlock_unlock(&n->lock);
         return recursive_delete(*child, child, key, key_len, depth + 1);
     }
 }
+
 
 void *art_delete(art_tree *t, const unsigned char *key, int key_len) {
     art_leaf_node *l = recursive_delete(t->root, &t->root, key, key_len, 0);
@@ -727,6 +762,7 @@ static int recursive_iter(art_node *n, art_callback cb, void *data) {
     return 0;
 }
 
+
 int art_iter(art_tree *t, art_callback cb, void *data) {
     return recursive_iter(t->root, cb, data);
 }
@@ -740,7 +776,8 @@ static int find_less_callback(void *data, const unsigned char *key, uint32_t key
             ctx->found_key_len = key_len;
         }
     }
-    return 0; 
+    return 0;  
+}
 
 static int find_more_callback(void *data, const unsigned char *key, uint32_t key_len, void *value) {
     art_search_ctx *ctx = (art_search_ctx *) data;
@@ -751,15 +788,15 @@ static int find_more_callback(void *data, const unsigned char *key, uint32_t key
             ctx->found_key_len = key_len;
         }
     }
-    return 0; 
+    return 0;  
 }
-
 
 void *art_find_less(art_tree *t, const unsigned char *key, int key_len) {
     art_search_ctx ctx = {key, key_len, NULL, 0, NULL};
     art_iter(t, find_less_callback, &ctx);
     return ctx.value;
 }
+
 
 void *art_find_more(art_tree *t, const unsigned char *key, int key_len) {
     art_search_ctx ctx = {key, key_len, NULL, 0, NULL};
