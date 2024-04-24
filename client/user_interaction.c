@@ -8,6 +8,7 @@ int parseCommand(char* input, ConsoleCommand* cmd) {
         printf("No command entered.\n");
         return 0;
     }
+
     memset(cmd, 0, sizeof(ConsoleCommand));
     cmd->command_type = CMD_UNKNOWN;
 
@@ -148,6 +149,8 @@ void executeCommand(const ConsoleCommand* cmd){
         }
     }
 }
+
+
 void *user_interaction_thread(void *arg) {
     char message[MAX_INPUT_LENGTH];
     ConsoleCommand cmd;
