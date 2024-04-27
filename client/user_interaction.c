@@ -8,7 +8,6 @@ int parseCommand(char* input, ConsoleCommand* cmd) {
         printf("No command entered.\n");
         return 0;
     }
-
     memset(cmd, 0, sizeof(ConsoleCommand));
     cmd->command_type = CMD_UNKNOWN;
 
