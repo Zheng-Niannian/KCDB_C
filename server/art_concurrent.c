@@ -3,6 +3,7 @@
 #include <strings.h>
 #include <emmintrin.h>
 #include "art_concurrent.h"
+#include "data_type.h"
 
 #define IS_ART_LEAF(x) (((uintptr_t)x & 1))
 #define SET_ART_LEAF(x) ((void*)((uintptr_t)x | 1))
@@ -38,12 +39,14 @@ int art_tree_init(art_tree *t) {
 }
 
 static void destroy_node(art_node *n) {
+
     if (!n) return;
 
     if (IS_ART_LEAF(n)) {
         free(GET_LEAF_RAW_DATA(n));
         return;
     }
+
     int i, index;
     union {
         art_node4 *p1;
@@ -95,7 +98,6 @@ static void destroy_node(art_node *n) {
 
     free(n);
 }
-
 
 int art_tree_destroy(art_tree *t) {
     destroy_node(t->root);
@@ -164,7 +166,6 @@ static inline int min(int a, int b) {
     return (a < b) ? a : b;
 }
 
-
 static int check_prefix(const art_node *n, const unsigned char *key, int key_len, int depth) {
     int max_cmp = min(min(n->part_key_length, MAX_PREFIX_LEN), key_len - depth);
     int index;
@@ -178,8 +179,10 @@ static int check_prefix(const art_node *n, const unsigned char *key, int key_len
 
 static int leaf_matches(const art_leaf_node *n, const unsigned char *key, int key_len, int depth) {
     (void) depth;
+    // Fail if the key lengths are different
     if (n->key_length != (uint32_t) key_len) return 1;
 
+    // Compare the keys starting at the depth
     return memcmp(n->key, key, key_len);
 }
 
@@ -189,14 +192,17 @@ void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
     art_node *n = t->root;
     int prefix_len, depth = 0;
     while (n) {
+        // Might be a leaf
         if (IS_ART_LEAF(n)) {
             n = (art_node *) GET_LEAF_RAW_DATA(n);
+            // Check if the expanded path matches
             if (!leaf_matches((art_leaf_node *) n, key, key_len, depth)) {
                 return ((art_leaf_node *) n)->value;
             }
             return NULL;
         }
         pthread_rwlock_rdlock(&n->lock);
+        // Bail if the prefix does not match
         if (n->part_key_length) {
             prefix_len = check_prefix(n, key, key_len, depth);
             if (prefix_len != min(MAX_PREFIX_LEN, n->part_key_length)) {
@@ -207,6 +213,7 @@ void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
             depth = depth + n->part_key_length;
         }
 
+        // Recursively search
         pthread_rwlock_unlock(&n->lock);
         child = find_children(n, key[depth]);
         n = (child) ? *child : NULL;
@@ -214,7 +221,6 @@ void *art_search(const art_tree *t, const unsigned char *key, int key_len) {
     }
     return NULL;
 }
-
 
 static art_leaf_node *minimum(const art_node *n) {
     if (!n) return NULL;
@@ -322,22 +328,31 @@ static void add_child48(art_node48 *n, art_node **ref, unsigned char c, void *ch
 
 static void add_child16(art_node16 *n, art_node **ref, unsigned char c, void *child) {
     if (n->node.children_count < 16) {
-        unsigned index = 0;
-        while (index < n->node.children_count && c > n->children_keys[index]) {
-            index++;
-        }
+        unsigned mask = (1 << n->node.children_count) - 1;
 
-        if (index < n->node.children_count) {
-            memmove(n->children_keys + index + 1, n->children_keys + index, (n->node.children_count - index) * sizeof(unsigned char));
-            memmove(n->children + index + 1, n->children + index, (n->node.children_count - index) * sizeof(void*));
+        __m128i cmp;
+        cmp = _mm_cmplt_epi8(_mm_set1_epi8(c),
+                             _mm_loadu_si128((__m128i *) n->children_keys));
+
+        unsigned bitfield = _mm_movemask_epi8(cmp) & mask;
+
+        unsigned index;
+        if (bitfield) {
+            index = __builtin_ctz(bitfield);
+            memmove(n->children_keys + index + 1, n->children_keys + index, n->node.children_count - index);
+            memmove(n->children + index + 1, n->children + index,
+                    (n->node.children_count - index) * sizeof(void *));
+        } else {
+            index = n->node.children_count;
         }
 
         n->children_keys[index] = c;
-        n->children[index] = (art_node*)child;
+        n->children[index] = (art_node *) child;
         n->node.children_count++;
         pthread_rwlock_unlock(&n->node.lock);
     } else {
         art_node48 *new_node = (art_node48 *) alloc_node(NODE48);
+
         memcpy(new_node->children, n->children,
                sizeof(void *) * n->node.children_count);
         for (int i = 0; i < n->node.children_count; i++) {
@@ -360,12 +375,10 @@ static void add_child4(art_node4 *n, art_node **ref, unsigned char c, void *chil
             if (c < n->children_keys[index]) break;
         }
 
-        // Shift to make room
         memmove(n->children_keys + index + 1, n->children_keys + index, n->node.children_count - index);
         memmove(n->children + index + 1, n->children + index,
                 (n->node.children_count - index) * sizeof(void *));
 
-        // Insert element
         n->children_keys[index] = c;
         n->children[index] = (art_node *) child;
         n->node.children_count++;
@@ -373,7 +386,6 @@ static void add_child4(art_node4 *n, art_node **ref, unsigned char c, void *chil
     } else {
         art_node16 *new_node = (art_node16 *) alloc_node(NODE16);
 
-        // Copy the child pointers and the key map
         memcpy(new_node->children, n->children,
                sizeof(void *) * n->node.children_count);
         memcpy(new_node->children_keys, n->children_keys,
@@ -412,6 +424,7 @@ static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_
     }
 
     if (n->part_key_length > MAX_PREFIX_LEN) {
+        // Prefix is longer than what we've checked, find a leaf
         art_leaf_node *l = minimum(n);
         max_cmp = min(l->key_length, key_len) - depth;
         for (; index < max_cmp; index++) {
@@ -463,7 +476,6 @@ recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_
             pthread_rwlock_unlock(&n->lock);
             goto RECURSE_SEARCH;
         }
-
         art_node4 *new_node = (art_node4 *) alloc_node(NODE4);
         pthread_rwlock_wrlock(&new_node->node.lock);
         *ref = (art_node *) new_node;
@@ -503,14 +515,12 @@ recursive_insert(art_node *n, art_node **ref, const unsigned char *key, int key_
     return NULL;
 }
 
-
 void *art_insert(art_tree *t, const unsigned char *key, int key_len, void *value) {
     int previous_value = 0;
     void *previous_value_ptr = recursive_insert(t->root, &t->root, key, key_len, value, 0, &previous_value, 1);
     if (!previous_value) t->size++;
     return previous_value_ptr;
 }
-
 
 void *art_insert_no_replace(art_tree *t, const unsigned char *key, int key_len, void *value) {
     int previous_value = 0;
@@ -597,7 +607,6 @@ static void remove_child4(art_node4 *n, art_node **ref, art_node **l) {
     memmove(n->children_keys + pos, n->children_keys + pos + 1, n->node.children_count - 1 - pos);
     memmove(n->children + pos, n->children + pos + 1, (n->node.children_count - 1 - pos) * sizeof(void *));
     n->node.children_count--;
-
     if (n->node.children_count == 1) {
         art_node *child = n->children[0];
 
@@ -613,6 +622,7 @@ static void remove_child4(art_node4 *n, art_node **ref, art_node **l) {
                 prefix += sub_prefix;
             }
 
+            // Store the prefix in the child
             memcpy(child->part_key, n->node.part_key, min(prefix, MAX_PREFIX_LEN));
             child->part_key_length += n->node.part_key_length + 1;
         }
@@ -644,6 +654,7 @@ static void remove_child(art_node *n, art_node **ref, unsigned char c, art_node 
 
 static art_leaf_node *recursive_delete(art_node *n, art_node **ref, const unsigned char *key, int key_len, int depth) {
     if (!n) return NULL;
+
 
     if (IS_ART_LEAF(n)) {
         art_leaf_node *l = GET_LEAF_RAW_DATA(n);
@@ -683,6 +694,7 @@ static art_leaf_node *recursive_delete(art_node *n, art_node **ref, const unsign
         }
         return NULL;
 
+        // Recurse
     } else {
 //        pthread_rwlock_unlock(&n->lock);
         return recursive_delete(*child, child, key, key_len, depth + 1);
@@ -701,7 +713,9 @@ void *art_delete(art_tree *t, const unsigned char *key, int key_len) {
     return NULL;
 }
 
+/// Recursively iterates over the tree
 static int recursive_iter(art_node *n, art_callback cb, void *data) {
+    // Handle base cases
     if (!n) return 0;
     if (IS_ART_LEAF(n)) {
         art_leaf_node *l = GET_LEAF_RAW_DATA(n);
@@ -791,6 +805,7 @@ static int find_more_callback(void *data, const unsigned char *key, uint32_t key
     return 0;  
 }
 
+
 void *art_find_less(art_tree *t, const unsigned char *key, int key_len) {
     art_search_ctx ctx = {key, key_len, NULL, 0, NULL};
     art_iter(t, find_less_callback, &ctx);
@@ -802,4 +817,214 @@ void *art_find_more(art_tree *t, const unsigned char *key, int key_len) {
     art_search_ctx ctx = {key, key_len, NULL, 0, NULL};
     art_iter(t, find_more_callback, &ctx);
     return ctx.value;
+}
+
+#define ALIGN_SIZE 512
+char data_buffer[ALIGN_SIZE];  
+char padding_buffer[ALIGN_SIZE] = { 0 };  
+
+size_t calculate_aligned_size(size_t size) {
+    return (size + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1);
+}
+
+void write_element_to_file(FILE* file, TransferCommandPayload* info) {
+    memset(data_buffer, 0, ALIGN_SIZE);
+
+    int offset = 0;
+    memcpy(data_buffer + offset, &info->flag, sizeof(int));
+    offset += sizeof(int);
+    memcpy(data_buffer + offset, &info->keyLength, sizeof(int));
+    offset += sizeof(int);
+    memcpy(data_buffer + offset, &info->valueLength, sizeof(int));
+    offset += sizeof(int);
+    memcpy(data_buffer + offset, info->key, info->keyLength);
+    offset += info->keyLength;
+    memcpy(data_buffer + offset, info->value, info->valueLength);
+    offset += info->valueLength;
+
+    fwrite(data_buffer, sizeof(char), offset, file);
+
+
+    size_t padding_size = calculate_aligned_size(offset) - offset;
+    if (padding_size > 0) {
+        fwrite(padding_buffer, sizeof(char), padding_size, file);
+    }
+}
+
+void init_file(const char* filename) {
+    FILE* file = fopen(filename, "wb+");
+    if (!file) {
+        log_error( "Failed to open file\n");
+        return;
+    }
+
+
+    DiskInfo disk_info = { 0 }; 
+    char initial_padding[ALIGN_SIZE] = { 0 }; //Заполнить до 512 байт
+    fwrite(&disk_info, sizeof(DiskInfo), 1, file);
+    fwrite(initial_padding, sizeof(char), ALIGN_SIZE - sizeof(DiskInfo), file);
+    fclose(file);
+}
+
+void update_element_count(FILE* file, int count) {
+    rewind(file);
+    fwrite(&count, sizeof(int), 1, file);
+}
+
+TransferCommandPayload** readElements(FILE* fp, int* count) {
+    DiskInfo disk_info;
+
+    rewind(fp);
+    if (fread(&disk_info, sizeof(DiskInfo), 1, fp) != 1) {
+        log_error("Failed to read disk info\n");
+        return NULL;
+    }
+
+    *count = disk_info.element_count;
+
+    TransferCommandPayload** elements = (TransferCommandPayload**)malloc(*count * sizeof(TransferCommandPayload*));
+    if (elements == NULL) {
+        log_error( "Memory allocation failed\n");
+        return NULL;
+    }
+
+    fseek(fp, ALIGN_SIZE, SEEK_SET);
+
+    for (int i = 0; i < *count; i++) {
+        elements[i] = (TransferCommandPayload*)malloc(sizeof(TransferCommandPayload));
+        if (elements[i] == NULL) {
+            log_error("Memory allocation for element failed\n");
+            for (int j = 0; j < i; j++) {
+                free(elements[j]);
+            }
+            free(elements);
+            return NULL;
+        }
+
+        fread(&elements[i]->flag, sizeof(int), 1, fp);
+        fread(&elements[i]->keyLength, sizeof(int), 1, fp);
+        fread(&elements[i]->valueLength, sizeof(int), 1, fp);
+
+        elements[i]->key = (char*)malloc(elements[i]->keyLength + 1);
+        elements[i]->value = (char*)malloc(elements[i]->valueLength + 1);
+
+        if (elements[i]->key == NULL || elements[i]->value == NULL) {
+            log_error("Memory allocation for key/value failed\n");
+  
+            for (int j = 0; j <= i; j++) {
+                free(elements[j]->key);
+                free(elements[j]->value);
+                free(elements[j]);
+            }
+            free(elements);
+            return NULL;
+        }
+
+  
+        fread(elements[i]->key, sizeof(char), elements[i]->keyLength, fp);
+        elements[i]->key[elements[i]->keyLength] = '\0';  // Null-terminate the string
+        fread(elements[i]->value, sizeof(char), elements[i]->valueLength, fp);
+        elements[i]->value[elements[i]->valueLength] = '\0';  // Null-terminate the string
+
+
+        int totalLength=elements[i]->keyLength+elements[i]->valueLength;
+
+
+        fseek(fp, calculate_aligned_size(totalLength + 3 * sizeof(int)) - (totalLength + 3 * sizeof(int)), SEEK_CUR);
+    }
+
+    return elements;
+}
+
+
+int file_exists(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return 1;
+    }
+    return 0;
+}
+
+const char *art_original="art_data.bin";
+const char* art_backup="art_data_backup.bin";
+const char* art_tmp="art_data_tmp.bin";
+
+int rename_and_replace_files() {
+
+    if (file_exists(art_backup)) {
+        if (remove(art_backup) != 0) {
+            log_error("Failed to remove existing backup file\n");
+            return 0;
+        }
+    }
+
+
+    if (file_exists(art_original)) {
+        if (rename(art_original, art_backup) != 0) {
+            log_error("Failed to rename original file to backup\n");
+            return 0;
+        }
+    }
+
+
+    if (rename(art_tmp, art_original) != 0) {
+        log_error( "Failed to rename temp file to original\n");
+
+        if (file_exists(art_backup)) {
+            rename(art_backup, art_original);
+        }
+        return 0;
+    }
+
+    return 1;
+}
+
+static int art_save_data_callback(void *data, const unsigned char *key, uint32_t key_len, void *value) {
+    FILE *file=(FILE*)data;
+    TransferCommandPayload *payload=(TransferCommandPayload*)value;
+    write_element_to_file(file,payload);
+    return 0;  
+}
+
+int save_art_data(art_tree *t){
+    init_file(art_tmp);
+
+    FILE* file = fopen(art_tmp, "rb+");
+    if (!file) {
+        return 0;
+    }
+
+    fseek(file, ALIGN_SIZE, SEEK_SET); // Переход к позиции 512 байт для начала записи данных
+
+    art_iter(t,art_save_data_callback,file);
+
+    rewind(file);
+    update_element_count(file, t->size);
+
+    fclose(file);
+
+    return rename_and_replace_files();
+}
+void load_art_data(art_tree *t){
+    FILE* file = fopen(art_original, "rb");
+    if (!file) {
+        log_error("Failed to open file for reading\n");
+        return;
+    }
+    int count;
+    TransferCommandPayload** elements = readElements(file, &count);
+
+    if (elements != NULL) {
+        printf("Total Elements: %d\n", count);
+        for (int i = 0; i < count; i++) {
+            printf("Element %d: Key = %s, Value = %s\n", i, elements[i]->key, elements[i]->value);
+            art_insert(t,elements[i]->key,elements[i]->keyLength,elements[i]);
+        }
+    }
+
+    fclose(file);
+
+    log_success("Load Data Success\n");
+
 }
