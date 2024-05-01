@@ -7,33 +7,58 @@
 #define SOCKET_BUFFER_SIZE (1024)
 #define SOCKET_DATA_HANDLER_SIZE (20)
 
-enum CommandType{
-    NOT_WAIT,LOGIN_REQUEST,LOGIN_RESULT,FIND_REQUEST,FIND_RESULT,SET_REQUEST,SET_RESULT,UPDATE_REQUEST,UPDATE_RESULT,
-    FIND_LESS_REQUEST,FIND_LESS_RESULT,FIND_MORE_REQUEST,FIND_MORE_RESULT,DELETE_REQUEST,DELETE_RESULT,HELP_COMMAND
+enum CommandType {
+    NOT_WAIT,
+    LOGIN_REQUEST,
+    LOGIN_RESULT,
+    FIND_REQUEST,
+    FIND_RESULT,
+    SET_REQUEST,
+    SET_RESULT,
+    UPDATE_REQUEST,
+    UPDATE_RESULT,
+    FIND_LESS_REQUEST,
+    FIND_LESS_RESULT,
+    FIND_MORE_REQUEST,
+    FIND_MORE_RESULT,
+    DELETE_REQUEST,
+    DELETE_RESULT,
+    HELP_COMMAND,
+    EXIT_COMMAND,
+    SAVE_REQUEST,
+    SAVE_RESULT
 };
 
-
+//4 dataType 4 length ....content
 
 typedef struct {
     int32_t dataType;
-}PacketHeader;
+} PacketHeader;
 
-typedef struct{
+typedef struct {
     void *src;
     int32_t actualLen;
     int32_t dataType;
     FILE *fp;
-}PacketPayload;
+} PacketPayload;
 
-typedef struct{
+typedef struct {
     char username[20];
     char password[20];
-}LoginRequest;
+} LoginRequest;
 
-typedef struct{
+typedef struct {
     int loginResult;
     int32_t clientId;
-}LoginResult;
+} LoginResult;
+
+typedef struct{
+    int32_t flag;//just for compiler happy
+}SaveRequest;
+
+typedef struct{
+    int32_t flag;
+}SaveResult;
 
 //typedef struct{
 //    int32_t keyLength;
@@ -45,14 +70,25 @@ typedef struct{
 //    void *value;
 //}QueryKeyResult;
 
-typedef struct{
+typedef struct {
     int totalLength;//sizeof(KeyLength)+sizeof(valueLength)+KeyContent+ValueContent
     int keyLength;
     int valueLength;
     //key content
     //value content;
-}TransferCommand;
+} TransferCommand;
 
+typedef struct {
+    int flag;
+    int keyLength;
+    int valueLength;
+    char *key;
+    char *value;
+} TransferCommandPayload;
+
+typedef struct {
+    int element_count;
+} DiskInfo;
 
 
 #endif //KVFILESERVER_DATA_TYPE_H
