@@ -29,23 +29,23 @@ void afterHandleMessage(ClientTransferState *state) {
 extern void handleMessage(ClientTransferState *state, PacketPayload *payload);
 
 const enum CommandType immutableList[] = {
-        NOT_WAIT, LOGIN_REQUEST, LOGIN_RESULT
+        NOT_WAIT, LOGIN_REQUEST, LOGIN_RESULT,SAVE_REQUEST,SAVE_RESULT
 };
-//4 type content
+
 const int immutableTransferTypeLength[] = {
-        0, sizeof(LoginRequest), sizeof(LoginResult)
+        0, sizeof(LoginRequest), sizeof(LoginResult),sizeof(SaveRequest),sizeof(SaveResult)
 };
-#define IMMUTABLE_LIST_SIZE     (3)
+#define IMMUTABLE_LIST_SIZE     (5)
 
 const enum CommandType serverHandleMessageTypeList[] = {
-        LOGIN_REQUEST, FIND_REQUEST, SET_REQUEST, UPDATE_REQUEST, FIND_LESS_REQUEST, FIND_MORE_REQUEST, DELETE_REQUEST
+        LOGIN_REQUEST, FIND_REQUEST, SET_REQUEST, UPDATE_REQUEST, FIND_LESS_REQUEST, FIND_MORE_REQUEST, DELETE_REQUEST,SAVE_REQUEST
 };
-#define SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE    (7)
+#define SERVER_HANDLE_MESSAGE_TYPE_LIST_SIZE    (8)
 
 const enum CommandType serverReturnMessageTypeList[] = {
-        LOGIN_RESULT, FIND_RESULT, SET_RESULT, UPDATE_RESULT, FIND_LESS_RESULT, FIND_MORE_RESULT, DELETE_RESULT
+        LOGIN_RESULT, FIND_RESULT, SET_RESULT, UPDATE_RESULT, FIND_LESS_RESULT, FIND_MORE_RESULT, DELETE_RESULT,SAVE_RESULT
 };
-#define SERVER_RETURN_MESSAGE_TYPE_LIST_SIZE     (7)
+#define SERVER_RETURN_MESSAGE_TYPE_LIST_SIZE     (8)
 
 const enum CommandType transferCommandReturnTypeList[]={
         FIND_RESULT,SET_RESULT,UPDATE_RESULT,FIND_LESS_RESULT,FIND_MORE_RESULT,DELETE_RESULT
@@ -88,6 +88,14 @@ void handle_message(char *data, int socket, int32_t count, ClientTransferState *
                 data += useCount;
                 count -= useCount;
                 state->unknownMessageLength = 1;
+
+//                for(int i=0;i<IMMUTABLE_LIST_SIZE;i++){
+//                    if(state->messageType==immutableList[i]){
+//                        state->unknownMessageLength=0;
+//                        state->messageLength=immutableList[i];
+//                    }
+//                }
+
             } else {
                 fprintf(stdout, "find small piece,construct header not finish\n");
                 memcpy(state->buffer + state->receivedLength, data, count);
@@ -116,7 +124,7 @@ void handle_message(char *data, int socket, int32_t count, ClientTransferState *
                 char *previousBuffer = state->buffer;
 
                 if (state->messageLength > TRANSFER_MEMORY_BUFFER_MAX_SIZE) {
-                    sprintf(state->filename_buffer, "/home/zheng1/KVF/tmp/file_buffer_%d_%d.bin", state->clientId,
+                    sprintf(state->filename_buffer, "/home/KVF/zheng1/tmp/file_buffer_%d_%d.bin", state->clientId,
                             state->messageId++);
                     fprintf(stdout, "try to create file: %s\n", state->filename_buffer);
                     state->fp = fopen(state->filename_buffer, "w+");
@@ -193,7 +201,7 @@ void handle_message(char *data, int socket, int32_t count, ClientTransferState *
         int process = 0;
         for (int i = 0; i < IMMUTABLE_LIST_SIZE; i++) {
             if (header->dataType == immutableList[i]) {
-                //20 4=24  24
+  
                 int needPayloadBytesCount = immutableTransferTypeLength[i] - (count - sizeof(PacketHeader));
                 if (needPayloadBytesCount <= 0) {
                     PacketPayload payload = deserializeActualData(state, data, count);
@@ -206,7 +214,7 @@ void handle_message(char *data, int socket, int32_t count, ClientTransferState *
                     state->messageLength = immutableTransferTypeLength[i] + sizeof(PacketHeader);
                     state->receivedLength = count;
                     memcpy(state->buffer, data, state->receivedLength);
-                    //wait for reconstruct
+                
                 }
                 int allowance = count - immutableTransferTypeLength[i] - sizeof(PacketHeader);
                 if (allowance > 0) {
@@ -240,7 +248,7 @@ void handle_message(char *data, int socket, int32_t count, ClientTransferState *
                             state->receivedLength = count;
 
                             if (state->messageLength > TRANSFER_MEMORY_BUFFER_MAX_SIZE) {
-                                sprintf(state->filename_buffer, "/home/zheng1/KVF/tmpfile_buffer_%d_%d.bin",
+                                sprintf(state->filename_buffer, "/home/zheng1/tmpfile_buffer_%d_%d.bin",
                                         state->clientId, state->messageId++);
                                 fprintf(stdout, "try to create file: %s\n", state->filename_buffer);
                                 state->fp = fopen(state->filename_buffer, "w+");
@@ -321,7 +329,6 @@ _Noreturn void initServer(void) {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
-    //TODO move into accept thread;
     while (1) {
         char buffer[SOCKET_BUFFER_SIZE] = {0};
 
