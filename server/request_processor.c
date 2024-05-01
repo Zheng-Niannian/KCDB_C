@@ -340,12 +340,32 @@ void handleDeleteRequest(ClientTransferState *state, PacketPayload *payload) {
     }
 }
 
+void handleSaveRequest(ClientTransferState *state,PacketPayload *payload){
+    SaveRequest *request=(SaveRequest*)payload->src;
+    SaveResult result={
+            0
+    };
+    if(request->flag){
+        if(save_art_data(&$__art_tree)){
+            log_success("Save Data Success\n");
+            result.flag=1;
+        }else{
+            log_error("Save Data Failed\n");
+        }
+    }
+    char* buffer=serializeTransferData(&result,sizeof(SaveResult),SAVE_RESULT);
+    sendSerializeData(state,buffer,sizeof(SaveResult));
+    free(buffer);
+}
+
 void initRequestProcessor(void) {
     art_tree_init(&$__art_tree);
+    load_art_data(&$__art_tree);
     setDataHandler(FIND_REQUEST, handleFindRequest);
     setDataHandler(SET_REQUEST, handleSetRequest);
     setDataHandler(UPDATE_REQUEST, handleUpdateRequest);
     setDataHandler(FIND_LESS_REQUEST, handleFindLessRequest);
     setDataHandler(FIND_MORE_REQUEST, handleFindMoreRequest);
     setDataHandler(DELETE_REQUEST, handleDeleteRequest);
+    setDataHandler(SAVE_REQUEST,handleSaveRequest);
 }
