@@ -2,12 +2,13 @@
 
 extern ClientTransferState clientTransferState;
 
-int parseCommand(char* input, ConsoleCommand* cmd) {
-    char* token = strtok(input, " \n");
+int parseCommand(char *input, ConsoleCommand *cmd) {
+    char *token = strtok(input, " \n");
     if (token == NULL) {
         printf("No command entered.\n");
         return 0;
     }
+
     memset(cmd, 0, sizeof(ConsoleCommand));
     cmd->command_type = CMD_UNKNOWN;
 
@@ -19,6 +20,7 @@ int parseCommand(char* input, ConsoleCommand* cmd) {
     else if (strcmp(token, "delete") == 0) cmd->command_type = DELETE_REQUEST;
     else if (strcmp(token, "help") == 0) cmd->command_type = HELP_COMMAND;
     else if (strcmp(token, "exit") == 0) cmd->command_type = EXIT_COMMAND;
+    else if (strcmp(token, "save") == 0) cmd->command_type = SAVE_REQUEST;
 
     while (token != NULL) {
         token = strtok(NULL, " \n");
@@ -33,13 +35,11 @@ int parseCommand(char* input, ConsoleCommand* cmd) {
             if (!cmd->key) {
                 cmd->key = strdup(token);
                 cmd->key_file = 1;
-            }
-            else if (!cmd->value) {
+            } else if (!cmd->value) {
                 cmd->value = strdup(token);
                 cmd->value_file = 1;
             }
-        }
-        else if (strcmp(token, ">") == 0) {
+        } else if (strcmp(token, ">") == 0) {
             cmd->redirect = 1;
             token = strtok(NULL, " \n");
             if (token == NULL) {
@@ -47,28 +47,45 @@ int parseCommand(char* input, ConsoleCommand* cmd) {
                 return 0;
             }
             cmd->output_file = strdup(token);
-        }
-        else if (!cmd->key) {
+        } else if (!cmd->key) {
             cmd->key = strdup(token);
-        }
-        else if (!cmd->value && !cmd->redirect) {
+        } else if (!cmd->value && !cmd->redirect) {
             cmd->value = strdup(token);
         }
     }
     return 1;
 }
 
-void printCommand(const ConsoleCommand* cmd) {
-    const char* commandTypeStr;
+void printCommand(const ConsoleCommand *cmd) {
+    const char *commandTypeStr;
     switch (cmd->command_type) {
-        case FIND_REQUEST:    commandTypeStr = "find"; break;
-        case SET_REQUEST:  commandTypeStr = "set"; break;
-        case UPDATE_REQUEST:  commandTypeStr = "update"; break;
-        case FIND_LESS_REQUEST:  commandTypeStr = "find_less"; break;
-        case FIND_MORE_REQUEST:  commandTypeStr = "find_more"; break;
-        case DELETE_REQUEST:  commandTypeStr = "delete"; break;
-        case HELP_COMMAND:    commandTypeStr = "help"; break;
-        default:          commandTypeStr = "unknown"; break;
+        case FIND_REQUEST:
+            commandTypeStr = "find";
+            break;
+        case SET_REQUEST:
+            commandTypeStr = "set";
+            break;
+        case UPDATE_REQUEST:
+            commandTypeStr = "update";
+            break;
+        case FIND_LESS_REQUEST:
+            commandTypeStr = "find_less";
+            break;
+        case FIND_MORE_REQUEST:
+            commandTypeStr = "find_more";
+            break;
+        case DELETE_REQUEST:
+            commandTypeStr = "delete";
+            break;
+        case HELP_COMMAND:
+            commandTypeStr = "help";
+            break;
+        case SAVE_REQUEST:
+            commandTypeStr = "save";
+            break;
+        default:
+            commandTypeStr = "unknown";
+            break;
     }
 
     printf("Command Type: %s\n", commandTypeStr);
@@ -80,9 +97,9 @@ void printCommand(const ConsoleCommand* cmd) {
     printf("Output File: %s\n", cmd->output_file ? cmd->output_file : "NULL");
 }
 
-long getFileSize(const char* filename){
-    FILE * fp = fopen(filename, "rb");
-    if(!fp){
+long getFileSize(const char *filename) {
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) {
         return -1;
     }
     fseek(fp, 0, SEEK_END);
@@ -110,41 +127,52 @@ void displayHelp() {
     printf("  exit - Exits the program.\n");
 }
 
-void executeCommand(const ConsoleCommand* cmd){
-    if(cmd->command_type==EXIT_COMMAND){
+void executeCommand(const ConsoleCommand *cmd) {
+    if (cmd->command_type == EXIT_COMMAND) {
         exit(EXIT_SUCCESS);
     }
-    if(cmd->command_type==HELP_COMMAND){
+    if (cmd->command_type == HELP_COMMAND) {
         displayHelp();
+        return;
+    }
+    if(cmd->command_type==SAVE_REQUEST){
+        SaveRequest request={1};
+        char* buffer= serializeTransferData(&request,sizeof(SaveRequest),SAVE_REQUEST);
+        if(!buffer){
+            log_error("cannot allocate memory for save request\n");
+            return;
+        }
+        sendSerializeData(&clientTransferState,buffer,sizeof(SaveRequest));
+        free(buffer);
         return;
     }
 
     TransferCommand transferCommand;
-    int32_t len=sizeof(transferCommand.totalLength)*3;
-    char* header=serializeTransferData((void*)cmd,len,cmd->command_type);
-    if(!header){
-        fprintf(stdout,"cannot serialize ConsoleCommand\n");
+    int32_t len = sizeof(transferCommand.totalLength) * 3;
+    char *header = serializeTransferData((void *) cmd, len, cmd->command_type);
+    if (!header) {
+        fprintf(stdout, "cannot serialize ConsoleCommand\n");
         return;
     }
-    for(int i=0;i<len+sizeof(PacketHeader);i++){
-        printf("%d ",header[i]);
+    for (int i = 0; i < len + sizeof(PacketHeader); i++) {
+        printf("%d ", header[i]);
     }
     printf("\n");
-    int bytes=sendSerializeData(&clientTransferState,header,len);
-    fprintf(stdout,"send header byte count:%d\n",bytes);
-    if(cmd->key_file){
-        sendFileData(&clientTransferState,cmd->key);
-    }else{
-        if(cmd->key){
-            sendRawData(&clientTransferState,cmd->key,strlen(cmd->key));
+    int bytes = sendSerializeData(&clientTransferState, header, len);
+    fprintf(stdout, "send header byte count:%d\n", bytes);
+    if (cmd->key_file) {
+        sendFileData(&clientTransferState, cmd->key);
+    } else {
+        if (cmd->key) {
+            sendRawData(&clientTransferState, cmd->key, strlen(cmd->key));
         }
     }
 
-    if(cmd->value_file){
-        sendFileData(&clientTransferState,cmd->value);
-    }else{
-        if(cmd->value){
-            sendRawData(&clientTransferState,cmd->value,strlen(cmd->value));
+    if (cmd->value_file) {
+        sendFileData(&clientTransferState, cmd->value);
+    } else {
+        if (cmd->value) {
+            sendRawData(&clientTransferState, cmd->value, strlen(cmd->value));
         }
     }
 }
@@ -153,14 +181,14 @@ void executeCommand(const ConsoleCommand* cmd){
 void *user_interaction_thread(void *arg) {
     char message[MAX_INPUT_LENGTH];
     ConsoleCommand cmd;
-    while(clientTransferState.connect) {
-        fprintf(stdout,"client: ");
+    while (clientTransferState.connect) {
+        fprintf(stdout, "client: ");
         fgets(message, MAX_INPUT_LENGTH, stdin);
-        if(message[0]=='\n'){
+        if (message[0] == '\n') {
             continue;
         }
-        if(!parseCommand(message, &cmd)){
-            fprintf(stdout,"Invalid Command\n");
+        if (!parseCommand(message, &cmd)) {
+            fprintf(stdout, "Invalid Command\n");
             continue;
         }
         printCommand(&cmd);
@@ -170,6 +198,6 @@ void *user_interaction_thread(void *arg) {
         if (cmd.value && cmd.value_file) free(cmd.value);
         if (cmd.output_file) free(cmd.output_file);
     }
-    fprintf(stdout,"sendMsg thread exit normally\n");
+    fprintf(stdout, "sendMsg thread exit normally\n");
     return NULL;
 }
